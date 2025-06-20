@@ -1,0 +1,34 @@
+{
+  "name": "namazvaktim-backend",
+  "version": "1.0.0",
+  "description": "Diyanet API'sinden namaz vakitlerini alan ve Google Cloud Storage'a yükleyen backend servisi",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "fetch-prayer-times": "node src/fetchPrayerTimes.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1453-osm/namazvaktim.git"
+  },
+  "keywords": [
+    "namaz",
+    "prayer-times",
+    "diyanet",
+    "islamic",
+    "turkey"
+  ],
+  "author": "Osman",
+  "license": "MIT",
+  "dependencies": {
+    "@google-cloud/storage": "^7.7.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+} 

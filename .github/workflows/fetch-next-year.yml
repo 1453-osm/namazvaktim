@@ -1,0 +1,86 @@
+name: Fetch Next Year Prayer Times
+
+on:
+  # Sadece manuel tetikleme
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Hangi şehirler için veri alınsın?'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - turkey
+        - test
+      test_city_id:
+        description: 'Test için şehir ID (sadece test seçildiğinde)'
+        required: false
+        default: '9541'
+        type: string
+
+jobs:
+  fetch-next-year:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Create GCS service account key
+      run: |
+        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Set environment variables
+      run: |
+        echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
+        echo "NODE_ENV=production" >> $GITHUB_ENV
+        
+    - name: Get next year
+      id: year
+      run: echo "NEXT_YEAR=$(($(date +%Y) + 1))" >> $GITHUB_OUTPUT
+        
+    - name: Fetch prayer times (All cities - Next Year)
+      if: github.event.inputs.scope == 'all'
+      run: npm run fetch-prayer-times year ${{ steps.year.outputs.NEXT_YEAR }}
+      
+    - name: Fetch prayer times (Turkey only - Next Year)
+      if: github.event.inputs.scope == 'turkey'
+      run: npm run fetch-prayer-times turkey
+      env:
+        FORCE_YEAR: ${{ steps.year.outputs.NEXT_YEAR }}
+      
+    - name: Fetch prayer times (Test - Next Year)
+      if: github.event.inputs.scope == 'test'
+      run: |
+        YEAR=${{ steps.year.outputs.NEXT_YEAR }}
+        npm run fetch-prayer-times test ${{ github.event.inputs.test_city_id || '9541' }} $YEAR
+      
+    - name: Clean up service account key
+      if: always()
+      run: |
+        rm -f namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Notify completion
+      if: success()
+      run: |
+        echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı namaz vakitleri başarıyla alındı!"
+        echo "📅 Tarih: $(date)"
+        echo "🌍 Kapsam: ${{ github.event.inputs.scope }}"
+        echo "📊 İşlenen yıl: ${{ steps.year.outputs.NEXT_YEAR }}"
+        
+    - name: Notify failure
+      if: failure()
+      run: |
+        echo "❌ ${{ steps.year.outputs.NEXT_YEAR }} yılı namaz vakitleri alma işlemi başarısız!"
+        echo "📅 Tarih: $(date)"
+        echo "🔍 Loglara bakın: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" 

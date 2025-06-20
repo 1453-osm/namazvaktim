@@ -1,0 +1,237 @@
+name: Cleanup Old Prayer Times Data
+
+on:
+  # Her yıl 3 Ocak saat 00:00'da otomatik çalıştır (UTC)
+  schedule:
+    - cron: '0 0 3 1 *'  # 3 Ocak 00:00 UTC (Türkiye saati 03:00)
+  
+  # Manuel tetikleme de mümkün (test için)
+  workflow_dispatch:
+    inputs:
+      target_year:
+        description: 'Silinecek yıl (boş bırakılırsa önceki yıl otomatik hesaplanır)'
+        required: false
+        type: string
+      confirm_delete:
+        description: 'Silme işlemini onaylıyorum (true yazın)'
+        required: true
+        default: 'false'
+        type: string
+      dry_run:
+        description: 'Sadece hangi dosyaların silineceğini göster (gerçekte silme)'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  cleanup-old-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Create GCS service account key
+      run: |
+        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Set environment variables
+      run: |
+        echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
+        echo "NODE_ENV=production" >> $GITHUB_ENV
+        
+    - name: Calculate target year
+      id: year
+      run: |
+        if [ -n "${{ github.event.inputs.target_year }}" ]; then
+          TARGET_YEAR="${{ github.event.inputs.target_year }}"
+        else
+          TARGET_YEAR=$(($(date +%Y) - 1))
+        fi
+        
+        CURRENT_YEAR=$(date +%Y)
+        
+        echo "TARGET_YEAR=$TARGET_YEAR" >> $GITHUB_OUTPUT
+        echo "CURRENT_YEAR=$CURRENT_YEAR" >> $GITHUB_OUTPUT
+        
+        echo "🗓️  Hedef yıl: $TARGET_YEAR"
+        echo "📅 Mevcut yıl: $CURRENT_YEAR"
+        
+    - name: Validate deletion safety
+      run: |
+        TARGET_YEAR=${{ steps.year.outputs.TARGET_YEAR }}
+        CURRENT_YEAR=${{ steps.year.outputs.CURRENT_YEAR }}
+        
+        echo "🔍 Güvenlik kontrolleri yapılıyor..."
+        
+        # Gelecek yıl verilerini silmeye çalışıyorsa engelle
+        if [ $TARGET_YEAR -ge $CURRENT_YEAR ]; then
+          echo "❌ HATA: Mevcut yıl ($CURRENT_YEAR) veya gelecek yıl verilerini silemezsiniz!"
+          echo "🛡️  Sadece geçmiş yılların verileri silinebilir."
+          exit 1
+        fi
+        
+        # Manuel tetiklemede onay kontrolü
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.confirm_delete }}" != "true" ]; then
+          echo "❌ HATA: Manuel silme işlemi için 'confirm_delete' alanına 'true' yazmalısınız!"
+          echo "🛡️  Bu güvenlik önlemidir."
+          exit 1
+        fi
+        
+        echo "✅ Güvenlik kontrolleri geçildi."
+        echo "📋 $TARGET_YEAR yılı verileri silinebilir."
+        
+    - name: List files to be deleted (Dry Run)
+      id: list_files
+      run: |
+        echo "📂 ${{ steps.year.outputs.TARGET_YEAR }} yılına ait dosyalar listeleniyor..."
+        
+        # GCS'deki dosyaları listele
+        node -e "
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
+          
+          async function listOldFiles() {
+            try {
+              const allFiles = await gcs.listFiles();
+              const targetYear = '${{ steps.year.outputs.TARGET_YEAR }}';
+              
+              const oldFiles = allFiles.filter(fileName => 
+                fileName.includes(\`-\${targetYear}.json\`) || 
+                fileName === \`summary-\${targetYear}.json\`
+              );
+              
+              console.log(\`📊 Toplam dosya sayısı: \${allFiles.length}\`);
+              console.log(\`🗑️  Silinecek dosya sayısı: \${oldFiles.length}\`);
+              console.log('');
+              
+              if (oldFiles.length > 0) {
+                console.log('📋 Silinecek dosyalar:');
+                oldFiles.forEach((file, index) => {
+                  console.log(\`   \${index + 1}. \${file}\`);
+                });
+                
+                // Dosya sayısını output olarak ayarla
+                console.log('');
+                console.log(\`FILE_COUNT=\${oldFiles.length}\`);
+              } else {
+                console.log('✅ Silinecek dosya bulunamadı.');
+                console.log('FILE_COUNT=0');
+              }
+              
+            } catch (error) {
+              console.error('❌ Dosya listeleme hatası:', error.message);
+              process.exit(1);
+            }
+          }
+          
+          listOldFiles();
+        " | tee /tmp/file_list.txt
+        
+        # FILE_COUNT'u output olarak ayarla
+        FILE_COUNT=$(grep "FILE_COUNT=" /tmp/file_list.txt | cut -d'=' -f2)
+        echo "FILE_COUNT=$FILE_COUNT" >> $GITHUB_OUTPUT
+        
+    - name: Delete old files
+      if: steps.list_files.outputs.FILE_COUNT != '0' && github.event.inputs.dry_run != 'true'
+      run: |
+        echo "🗑️  ${{ steps.year.outputs.TARGET_YEAR }} yılı verileri siliniyor..."
+        
+        node -e "
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
+          
+          async function deleteOldFiles() {
+            try {
+              const allFiles = await gcs.listFiles();
+              const targetYear = '${{ steps.year.outputs.TARGET_YEAR }}';
+              
+              const oldFiles = allFiles.filter(fileName => 
+                fileName.includes(\`-\${targetYear}.json\`) || 
+                fileName === \`summary-\${targetYear}.json\`
+              );
+              
+              console.log(\`🗑️  \${oldFiles.length} dosya siliniyor...\`);
+              
+              let successCount = 0;
+              let errorCount = 0;
+              
+              for (const fileName of oldFiles) {
+                try {
+                  await gcs.deleteFile(fileName);
+                  successCount++;
+                  
+                  if (successCount % 100 === 0) {
+                    console.log(\`   ✅ \${successCount}/\${oldFiles.length} dosya silindi...\`);
+                  }
+                } catch (error) {
+                  console.error(\`   ❌ \${fileName} silinemedi: \${error.message}\`);
+                  errorCount++;
+                }
+              }
+              
+              console.log('');
+              console.log('📊 Silme işlemi tamamlandı:');
+              console.log(\`   ✅ Başarılı: \${successCount}\`);
+              console.log(\`   ❌ Hatalı: \${errorCount}\`);
+              console.log(\`   📂 Toplam: \${oldFiles.length}\`);
+              
+              if (errorCount > 0) {
+                console.log('⚠️  Bazı dosyalar silinemedi. Loglara bakın.');
+                process.exit(1);
+              }
+              
+            } catch (error) {
+              console.error('❌ Silme işlemi hatası:', error.message);
+              process.exit(1);
+            }
+          }
+          
+          deleteOldFiles();
+        "
+        
+    - name: Clean up service account key
+      if: always()
+      run: |
+        rm -f namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Notify completion - Files deleted
+      if: success() && steps.list_files.outputs.FILE_COUNT != '0' && github.event.inputs.dry_run != 'true'
+      run: |
+        echo "🎉 BAŞARILI! ${{ steps.year.outputs.TARGET_YEAR }} yılı verileri temizlendi!"
+        echo "📅 Temizleme tarihi: $(date)"
+        echo "🗑️  Silinen dosya sayısı: ${{ steps.list_files.outputs.FILE_COUNT }}"
+        echo "💾 Storage alanı boşaltıldı"
+        echo "🔄 Eski veriler artık mobil uygulamalarda kullanılamayacak"
+        
+    - name: Notify completion - Dry run
+      if: success() && github.event.inputs.dry_run == 'true'
+      run: |
+        echo "👀 DRY RUN TAMAMLANDI!"
+        echo "📅 Kontrol tarihi: $(date)"
+        echo "🗑️  Silinecek dosya sayısı: ${{ steps.list_files.outputs.FILE_COUNT }}"
+        echo "💡 Gerçek silme için 'dry_run' parametresini 'false' yapın"
+        
+    - name: Notify completion - No files found
+      if: success() && steps.list_files.outputs.FILE_COUNT == '0'
+      run: |
+        echo "✅ ${{ steps.year.outputs.TARGET_YEAR }} yılına ait silinecek dosya bulunamadı."
+        echo "📅 Kontrol tarihi: $(date)"
+        echo "🧹 Storage zaten temiz!"
+        
+    - name: Notify failure
+      if: failure()
+      run: |
+        echo "❌ HATA! ${{ steps.year.outputs.TARGET_YEAR }} yılı veri temizleme işlemi başarısız!"
+        echo "📅 Hata tarihi: $(date)"
+        echo "🔍 Loglara bakın: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo "⚠️  Manuel olarak kontrol edin veya tekrar deneyin" 

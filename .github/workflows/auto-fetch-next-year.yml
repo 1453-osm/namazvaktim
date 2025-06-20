@@ -1,0 +1,167 @@
+name: Auto Fetch Next Year Prayer Times
+
+on:
+  # Her yıl 1 Aralık saat 00:00'da başlat, sonra 3 günde bir kontrol et
+  schedule:
+    - cron: '0 0 1 12 *'   # 1 Aralık 00:00 UTC
+    - cron: '0 0 4 12 *'   # 4 Aralık 00:00 UTC  
+    - cron: '0 0 7 12 *'   # 7 Aralık 00:00 UTC
+    - cron: '0 0 10 12 *'  # 10 Aralık 00:00 UTC
+    - cron: '0 0 13 12 *'  # 13 Aralık 00:00 UTC
+    - cron: '0 0 16 12 *'  # 16 Aralık 00:00 UTC
+    - cron: '0 0 19 12 *'  # 19 Aralık 00:00 UTC
+    - cron: '0 0 22 12 *'  # 22 Aralık 00:00 UTC
+    - cron: '0 0 25 12 *'  # 25 Aralık 00:00 UTC
+    - cron: '0 0 28 12 *'  # 28 Aralık 00:00 UTC
+    - cron: '0 0 31 12 *'  # 31 Aralık 00:00 UTC (son şans)
+  
+  # Manuel tetikleme de mümkün (acil durumlar için)
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Zorla çalıştır (veri kontrolü atla)'
+        required: false
+        default: false
+        type: boolean
+      skip_check:
+        description: 'Veri kontrolünü atla ve direkt indir'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  auto-fetch-next-year:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Create GCS service account key
+      run: |
+        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Set environment variables
+      run: |
+        echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
+        echo "NODE_ENV=production" >> $GITHUB_ENV
+        
+    - name: Get next year
+      id: year
+      run: echo "NEXT_YEAR=$(($(date +%Y) + 1))" >> $GITHUB_OUTPUT
+        
+    - name: Log start information
+      run: |
+        echo "🚀 Otomatik namaz vakti alma işlemi başlatılıyor..."
+        echo "📅 Bugün: $(date)"
+        echo "📊 Hedef yıl: ${{ steps.year.outputs.NEXT_YEAR }}"
+        echo "🌍 Kapsam: Tüm dünya şehirleri (~8,552 şehir)"
+        
+    - name: Check if next year data exists in Diyanet API
+      id: check_data
+      if: github.event.inputs.skip_check != 'true'
+      run: |
+        echo "🔍 ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri Diyanet API'sinde mevcut mu kontrol ediliyor..."
+        
+        # Test şehri olarak İstanbul/Kadıköy (9541) kullan
+        TEST_RESULT=$(npm run fetch-prayer-times test 9541 ${{ steps.year.outputs.NEXT_YEAR }} 2>&1 || echo "FAILED")
+        
+        if echo "$TEST_RESULT" | grep -q "365 günlük veri alındı\|366 günlük veri alındı"; then
+          echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri mevcut!"
+          echo "DATA_AVAILABLE=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri henüz mevcut değil."
+          echo "📅 3 gün sonra tekrar kontrol edilecek..."
+          echo "DATA_AVAILABLE=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Check if data already exists in GCS
+      id: check_gcs
+      if: steps.check_data.outputs.DATA_AVAILABLE == 'true' || github.event.inputs.skip_check == 'true'
+      run: |
+        echo "☁️  GCS'de ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri var mı kontrol ediliyor..."
+        
+        # Özet dosyasının varlığını kontrol et
+        SUMMARY_EXISTS=$(node -e "
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
+          gcs.fileExists('summary-${{ steps.year.outputs.NEXT_YEAR }}.json')
+            .then(exists => console.log(exists ? 'EXISTS' : 'NOT_EXISTS'))
+            .catch(() => console.log('NOT_EXISTS'));
+        " 2>/dev/null || echo "NOT_EXISTS")
+        
+        if [ "$SUMMARY_EXISTS" = "EXISTS" ]; then
+          echo "⚠️  ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri zaten GCS'de mevcut!"
+          echo "ALREADY_EXISTS=true" >> $GITHUB_OUTPUT
+        else
+          echo "✅ GCS'de veri yok, indirme işlemi başlatılabilir."
+          echo "ALREADY_EXISTS=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Fetch prayer times for all cities (Next Year)
+      if: (steps.check_data.outputs.DATA_AVAILABLE == 'true' && steps.check_gcs.outputs.ALREADY_EXISTS == 'false') || github.event.inputs.skip_check == 'true'
+      run: npm run fetch-prayer-times all
+      timeout-minutes: 180  # 3 saat timeout (çok fazla şehir var)
+      
+    - name: Skip - Data not ready yet
+      if: steps.check_data.outputs.DATA_AVAILABLE == 'false'
+      run: |
+        echo "⏳ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri henüz hazır değil."
+        echo "📅 Bir sonraki kontrol: 3 gün sonra"
+        echo "🔄 Bu normal bir durumdur. Diyanet bazen verileri geç yayınlar."
+        
+    - name: Skip - Data already exists
+      if: steps.check_gcs.outputs.ALREADY_EXISTS == 'true'
+      run: |
+        echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri zaten GCS'de mevcut!"
+        echo "📁 Tekrar indirme gerekmiyor."
+        echo "🔄 Bu workflow artık bu yıl için çalışmayacak."
+      
+    - name: Clean up service account key
+      if: always()
+      run: |
+        rm -f namazvaktim-1453-461cbfd17aaf.json
+        
+    - name: Notify completion - Data downloaded
+      if: success() && (steps.check_data.outputs.DATA_AVAILABLE == 'true' && steps.check_gcs.outputs.ALREADY_EXISTS == 'false')
+      run: |
+        echo "🎉 BAŞARILI! ${{ steps.year.outputs.NEXT_YEAR }} yılı namaz vakitleri otomatik olarak alındı!"
+        echo "📅 Tamamlanma tarihi: $(date)"
+        echo "📊 İşlenen yıl: ${{ steps.year.outputs.NEXT_YEAR }}"
+        echo "🌍 Kapsam: Tüm dünya şehirleri (~8,552 şehir)"
+        echo "☁️  Veriler 'namazvaktimdepo' bucket'ında saklandı"
+        echo "📱 Mobil uygulamalar artık ${{ steps.year.outputs.NEXT_YEAR }} yılı verilerini kullanabilir!"
+        echo "🔄 Bu workflow artık bu yıl için çalışmayacak."
+        
+    - name: Notify completion - Data not ready
+      if: success() && steps.check_data.outputs.DATA_AVAILABLE == 'false'
+      run: |
+        echo "⏳ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri henüz Diyanet API'sinde mevcut değil."
+        echo "📅 Kontrol tarihi: $(date)"
+        echo "🔄 3 gün sonra tekrar kontrol edilecek."
+        echo "📋 Bu normal bir durumdur. Diyanet bazen verileri geç yayınlar."
+        
+    - name: Notify completion - Data already exists
+      if: success() && steps.check_gcs.outputs.ALREADY_EXISTS == 'true'
+      run: |
+        echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri zaten GCS'de mevcut!"
+        echo "📅 Kontrol tarihi: $(date)"
+        echo "📁 Tekrar indirme gerekmiyor."
+        echo "🔄 Bu workflow artık bu yıl için çalışmayacak."
+        
+    - name: Notify failure
+      if: failure()
+      run: |
+        echo "❌ HATA! ${{ steps.year.outputs.NEXT_YEAR }} yılı otomatik namaz vakti kontrol/alma işlemi başarısız!"
+        echo "📅 Hata tarihi: $(date)"
+        echo "🔍 Loglara bakın: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo "⚠️  Manuel olarak çalıştırmayı deneyin: 'Fetch Next Year Prayer Times' workflow'u" 

@@ -1,0 +1,7 @@
+- Türkçe konuş
+- diyanet apileri:
+awqatsalah.diyanet.gov.tr/Auth/Login
+awqatsalah.diyanet.gov.tr/Auth/RefreshToken/{refreshToken}
+awqatsalah.diyanet.gov.tr/api/PrayerTime/DateRange
+- diyanet api için Kullanici Adi: ozavciosman17@gmail.com - Şifre: cN5+4q%F
+- github deposu: https://github.com/1453-osm/namazvaktim.git
