@@ -22,6 +22,10 @@ on:
 jobs:
   fetch-current-year:
     runs-on: ubuntu-latest
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_BUCKET_NAME: namazvaktimdepo
+      NODE_ENV: production
     
     steps:
     - name: Checkout repository
@@ -36,12 +40,7 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Set environment variables
-      run: |
-        echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
-        echo "NODE_ENV=production" >> $GITHUB_ENV
-      env:
-        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+
         
     - name: Get current year
       id: year
