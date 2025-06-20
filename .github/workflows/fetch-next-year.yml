@@ -44,6 +44,7 @@ jobs:
       run: |
         echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
         echo "NODE_ENV=production" >> $GITHUB_ENV
+        echo "GCS_SERVICE_ACCOUNT_KEY=${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" >> $GITHUB_ENV
         
     - name: Get next year
       id: year

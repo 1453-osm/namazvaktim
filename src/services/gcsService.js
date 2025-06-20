@@ -4,10 +4,28 @@ const path = require('path');
 
 class GCSService {
   constructor() {
-    this.storage = new Storage({
-      projectId: config.gcs.projectId,
-      keyFilename: config.gcs.keyFilename
-    });
+    // GitHub Actions'da environment variable olarak key geçilebilir
+    const storageConfig = {
+      projectId: config.gcs.projectId
+    };
+
+    // Eğer environment variable varsa onu kullan, yoksa keyFilename kullan
+    if (process.env.GCS_SERVICE_ACCOUNT_KEY) {
+      try {
+        // Base64 decoded key'i JSON olarak parse et
+        const keyData = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
+        storageConfig.credentials = keyData;
+      } catch (error) {
+        console.error('GCS Service Account Key parse hatası:', error.message);
+        // Fallback to file
+        storageConfig.keyFilename = config.gcs.keyFilename;
+      }
+    } else {
+      // Local development için dosya kullan
+      storageConfig.keyFilename = config.gcs.keyFilename;
+    }
+
+    this.storage = new Storage(storageConfig);
     this.bucket = this.storage.bucket(config.gcs.bucketName);
   }
 
