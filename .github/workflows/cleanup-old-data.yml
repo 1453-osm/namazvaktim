@@ -40,15 +40,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Create GCS service account key
-      run: |
-        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' > namazvaktim-1453-461cbfd17aaf.json
-        
     - name: Set environment variables
       run: |
         echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
         echo "NODE_ENV=production" >> $GITHUB_ENV
-        echo "GCS_SERVICE_ACCOUNT_KEY=${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" >> $GITHUB_ENV
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
         
     - name: Calculate target year
       id: year
@@ -93,6 +90,8 @@ jobs:
         
     - name: List files to be deleted (Dry Run)
       id: list_files
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
       run: |
         echo "📂 ${{ steps.year.outputs.TARGET_YEAR }} yılına ait dosyalar listeleniyor..."
         
@@ -144,6 +143,8 @@ jobs:
         
     - name: Delete old files
       if: steps.list_files.outputs.FILE_COUNT != '0' && github.event.inputs.dry_run != 'true'
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
       run: |
         echo "🗑️  ${{ steps.year.outputs.TARGET_YEAR }} yılı verileri siliniyor..."
         
@@ -200,10 +201,7 @@ jobs:
           deleteOldFiles();
         "
         
-    - name: Clean up service account key
-      if: always()
-      run: |
-        rm -f namazvaktim-1453-461cbfd17aaf.json
+
         
     - name: Notify completion - Files deleted
       if: success() && steps.list_files.outputs.FILE_COUNT != '0' && github.event.inputs.dry_run != 'true'

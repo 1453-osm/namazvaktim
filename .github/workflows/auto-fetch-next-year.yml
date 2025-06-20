@@ -46,15 +46,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Create GCS service account key
-      run: |
-        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' > namazvaktim-1453-461cbfd17aaf.json
-        
     - name: Set environment variables
       run: |
         echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
         echo "NODE_ENV=production" >> $GITHUB_ENV
-        echo "GCS_SERVICE_ACCOUNT_KEY=${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" >> $GITHUB_ENV
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
         
     - name: Get next year
       id: year
@@ -127,10 +124,7 @@ jobs:
         echo "📁 Tekrar indirme gerekmiyor."
         echo "🔄 Bu workflow artık bu yıl için çalışmayacak."
       
-    - name: Clean up service account key
-      if: always()
-      run: |
-        rm -f namazvaktim-1453-461cbfd17aaf.json
+
         
     - name: Notify completion - Data downloaded
       if: success() && (steps.check_data.outputs.DATA_AVAILABLE == 'true' && steps.check_gcs.outputs.ALREADY_EXISTS == 'false')

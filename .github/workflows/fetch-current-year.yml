@@ -36,15 +36,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Create GCS service account key
-      run: |
-        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' > namazvaktim-1453-461cbfd17aaf.json
-        
     - name: Set environment variables
       run: |
         echo "GCS_BUCKET_NAME=namazvaktimdepo" >> $GITHUB_ENV
         echo "NODE_ENV=production" >> $GITHUB_ENV
-        echo "GCS_SERVICE_ACCOUNT_KEY=${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" >> $GITHUB_ENV
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
         
     - name: Get current year
       id: year
@@ -64,10 +61,7 @@ jobs:
       if: github.event.inputs.scope == 'test'
       run: npm run fetch-prayer-times test ${{ github.event.inputs.test_city_id || '9541' }}
       
-    - name: Clean up service account key
-      if: always()
-      run: |
-        rm -f namazvaktim-1453-461cbfd17aaf.json
+
         
     - name: Notify completion
       if: success()

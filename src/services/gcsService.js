@@ -12,12 +12,24 @@ class GCSService {
     // Eğer environment variable varsa onu kullan, yoksa keyFilename kullan
     if (process.env.GCS_SERVICE_ACCOUNT_KEY) {
       try {
+        console.log('🔍 GCS_SERVICE_ACCOUNT_KEY environment variable bulundu');
+        console.log('📏 Key uzunluğu:', process.env.GCS_SERVICE_ACCOUNT_KEY.length);
+        console.log('🔤 Key başlangıcı:', process.env.GCS_SERVICE_ACCOUNT_KEY.substring(0, 50) + '...');
+        
         // JSON string'i doğrudan parse et (base64 decode gerekmiyor)
         const keyData = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
+        
+        // Key'in gerekli alanlarını kontrol et
+        if (!keyData.type || !keyData.project_id || !keyData.private_key) {
+          throw new Error('Service account key\'de gerekli alanlar eksik (type, project_id, private_key)');
+        }
+        
         storageConfig.credentials = keyData;
         console.log('🔑 GCS Service Account Key environment variable\'dan yüklendi');
+        console.log('📋 Project ID:', keyData.project_id);
+        console.log('🎯 Client Email:', keyData.client_email);
       } catch (error) {
-        console.error('GCS Service Account Key parse hatası:', error.message);
+        console.error('❌ GCS Service Account Key parse hatası:', error.message);
         console.log('📁 Fallback: Dosyadan key yükleniyor...');
         // Fallback to file
         storageConfig.keyFilename = config.gcs.keyFilename;
