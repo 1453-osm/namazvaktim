@@ -38,7 +38,7 @@ jobs:
       
     - name: Create GCS service account key
       run: |
-        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > namazvaktim-1453-461cbfd17aaf.json
+        echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' > namazvaktim-1453-461cbfd17aaf.json
         
     - name: Set environment variables
       run: |

@@ -12,16 +12,19 @@ class GCSService {
     // Eğer environment variable varsa onu kullan, yoksa keyFilename kullan
     if (process.env.GCS_SERVICE_ACCOUNT_KEY) {
       try {
-        // Base64 decoded key'i JSON olarak parse et
+        // JSON string'i doğrudan parse et (base64 decode gerekmiyor)
         const keyData = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
         storageConfig.credentials = keyData;
+        console.log('🔑 GCS Service Account Key environment variable\'dan yüklendi');
       } catch (error) {
         console.error('GCS Service Account Key parse hatası:', error.message);
+        console.log('📁 Fallback: Dosyadan key yükleniyor...');
         // Fallback to file
         storageConfig.keyFilename = config.gcs.keyFilename;
       }
     } else {
       // Local development için dosya kullan
+      console.log('📁 GCS Service Account Key dosyadan yükleniyor (local development)');
       storageConfig.keyFilename = config.gcs.keyFilename;
     }
 
