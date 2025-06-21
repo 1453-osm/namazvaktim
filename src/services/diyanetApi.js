@@ -60,26 +60,61 @@ class DiyanetApiService {
     try {
       console.log('Token yenileniyor...');
       
-      const response = await axios.post(
-        `${this.baseUrl}${config.diyanet.endpoints.refreshToken}/${this.refreshToken}`,
-        {},
-        {
-          headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json'
+      // Önce PUT method'unu dene
+      let response;
+      try {
+        response = await axios.put(
+          `${this.baseUrl}${config.diyanet.endpoints.refreshToken}/${this.refreshToken}`,
+          {},
+          {
+            headers: {
+              'Authorization': `Bearer ${this.accessToken}`,
+              'Content-Type': 'application/json'
+            }
           }
+        );
+      } catch (error) {
+        // PUT başarısız olursa GET method'unu dene
+        if (error.response && error.response.status === 405) {
+          console.log('PUT method başarısız, GET method deneniyor...');
+          response = await axios.get(
+            `${this.baseUrl}${config.diyanet.endpoints.refreshToken}/${this.refreshToken}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${this.accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+        } else {
+          throw error;
         }
-      );
+      }
 
-      if (response.data && response.data.accessToken) {
-        this.accessToken = response.data.accessToken;
+      // API yanıt yapısını kontrol et
+      let tokenData = response.data;
+      if (response.data && response.data.data) {
+        tokenData = response.data.data;
+      }
+
+      if (tokenData && tokenData.accessToken) {
+        this.accessToken = tokenData.accessToken;
+        // Refresh token da güncellenebilir
+        if (tokenData.refreshToken) {
+          this.refreshToken = tokenData.refreshToken;
+        }
         console.log('Token yenilendi!');
         return true;
       } else {
-        throw new Error('Token yenileme başarısız');
+        console.error('Beklenen token bulunamadı. Yanıt yapısı:', JSON.stringify(response.data, null, 2));
+        throw new Error('Token yenileme başarısız - beklenen veri bulunamadı');
       }
     } catch (error) {
-      console.error('Token yenileme hatası:', error.message);
+      console.error('Belirteç yenileme hatası:', error.message);
+      if (error.response) {
+        console.error('HTTP Durum Kodu:', error.response.status);
+        console.error('Hata detayı:', JSON.stringify(error.response.data, null, 2));
+      }
       throw error;
     }
   }
@@ -89,8 +124,9 @@ class DiyanetApiService {
    * @param {number} cityId - Şehir ID'si
    * @param {string} startDate - Başlangıç tarihi (YYYY-MM-DD)
    * @param {string} endDate - Bitiş tarihi (YYYY-MM-DD)
+   * @param {number} retryCount - Yeniden deneme sayısı (iç kullanım)
    */
-  async getPrayerTimes(cityId, startDate, endDate) {
+  async getPrayerTimes(cityId, startDate, endDate, retryCount = 0) {
     try {
       console.log(`Şehir ${cityId} için namaz vakitleri alınıyor: ${startDate} - ${endDate}`);
       
@@ -128,14 +164,31 @@ class DiyanetApiService {
         throw new Error('Namaz vakitleri alınamadı');
       }
     } catch (error) {
+      // Sonsuz döngü koruması
+      if (retryCount >= 3) {
+        console.error(`Şehir ${cityId} için maksimum deneme sayısına ulaşıldı (${retryCount})`);
+        throw error;
+      }
+
       // 401 hatası durumunda token yenile ve tekrar dene
       if (error.response && error.response.status === 401) {
         console.log('Token süresi dolmuş, yenileniyor...');
-        await this.refreshAccessToken();
-        return this.getPrayerTimes(cityId, startDate, endDate);
+        try {
+          await this.refreshAccessToken();
+          return this.getPrayerTimes(cityId, startDate, endDate, retryCount + 1);
+        } catch (refreshError) {
+          console.error('Token yenileme başarısız:', refreshError.message);
+          // Token yenileme başarısız olursa tekrar giriş yap
+          console.log('Yeniden giriş yapılıyor...');
+          await this.login();
+          return this.getPrayerTimes(cityId, startDate, endDate, retryCount + 1);
+        }
       }
       
-      console.error(`Şehir ${cityId} için namaz vakitleri alınırken hata:`, error.message);
+      console.error(`Şehir ${cityId} için hata:`, error.message);
+      if (error.response) {
+        console.error(`HTTP Durum Kodu: ${error.response.status}`);
+      }
       throw error;
     }
   }
@@ -149,6 +202,22 @@ class DiyanetApiService {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
     return await this.getPrayerTimes(cityId, startDate, endDate);
+  }
+
+  /**
+   * Diyanet API'sinden çıkış yapar (token'ları temizler)
+   */
+  logout() {
+    console.log('Diyanet API oturumu sonlandırılıyor...');
+    this.accessToken = null;
+    this.refreshToken = null;
+  }
+
+  /**
+   * Mevcut oturum durumunu kontrol eder
+   */
+  isLoggedIn() {
+    return this.accessToken !== null;
   }
 }
 
