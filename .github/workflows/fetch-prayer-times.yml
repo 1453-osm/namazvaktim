@@ -1,0 +1,334 @@
+name: Namaz Vakitleri Al (Paralel)
+
+on:
+  # Manuel tetikleme
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Hangi yıl için veri alınacak?'
+        required: false
+        default: '2025'
+        type: string
+      workers:
+        description: 'Paralel worker sayısı (1-50)'
+        required: false
+        default: '20'
+        type: string
+      turkey_only:
+        description: 'Sadece Türkiye şehirleri?'
+        required: false
+        default: false
+        type: boolean
+
+  # Otomatik tetikleme - her yıl 1 Aralık'ta
+  schedule:
+    - cron: '0 0 1 12 *'  # 1 Aralık 00:00 UTC
+
+  # Test için push tetiklemesi (sadece main branch)
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/fetch-prayer-times.yml'
+
+jobs:
+  fetch-prayer-times:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2 saat timeout (paralel olduğu için daha kısa)
+    
+    strategy:
+      fail-fast: false  # Bir hata tüm işlemi durdurmasın
+    
+    steps:
+    - name: Kodu Çek
+      uses: actions/checkout@v4
+
+    - name: Node.js Kur
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Bağımlılıkları Yükle
+      run: npm ci
+
+    - name: GCS Kimlik Bilgilerini Ayarla
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      run: |
+        echo "$GCS_SERVICE_ACCOUNT_KEY" > namazvaktim-1453-461cbfd17aaf.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=namazvaktim-1453-461cbfd17aaf.json" >> $GITHUB_ENV
+
+    - name: Parametreleri Belirle
+      id: params
+      run: |
+        # Yıl belirleme
+        if [ "${{ github.event_name }}" = "schedule" ]; then
+          YEAR=$(($(date +%Y) + 1))  # Otomatik: gelecek yıl
+          echo "Otomatik çalışma: $YEAR yılı için veri alınacak"
+        elif [ "${{ github.event.inputs.year }}" != "" ]; then
+          YEAR="${{ github.event.inputs.year }}"  # Manuel: girilen yıl
+          echo "Manuel çalışma: $YEAR yılı için veri alınacak"
+        else
+          YEAR=$(date +%Y)  # Varsayılan: bu yıl
+          echo "Varsayılan: $YEAR yılı için veri alınacak"
+        fi
+        
+        # Worker sayısı belirleme
+        WORKERS="${{ github.event.inputs.workers }}"
+        if [ "$WORKERS" = "" ]; then
+          WORKERS="20"  # Varsayılan 20 worker
+        fi
+        
+        # Türkiye modu belirleme
+        TURKEY_ONLY="${{ github.event.inputs.turkey_only }}"
+        
+        echo "year=$YEAR" >> $GITHUB_OUTPUT
+        echo "workers=$WORKERS" >> $GITHUB_OUTPUT
+        echo "turkey_only=$TURKEY_ONLY" >> $GITHUB_OUTPUT
+        
+        echo "📊 Çalışma Parametreleri:"
+        echo "- Yıl: $YEAR"
+        echo "- Paralel Worker: $WORKERS"
+        echo "- Sadece Türkiye: $TURKEY_ONLY"
+
+    - name: Sistem Bilgilerini Göster
+      run: |
+        echo "🖥️  Sistem Bilgileri:"
+        echo "- OS: $(uname -a)"
+        echo "- Node.js: $(node --version)"
+        echo "- NPM: $(npm --version)"
+        echo "- CPU: $(nproc) çekirdek"
+        echo "- RAM: $(free -h | grep Mem | awk '{print $2}')"
+        echo "- Disk: $(df -h / | tail -1 | awk '{print $4}') boş alan"
+
+    - name: API Bağlantısını Test Et
+      run: |
+        echo "🔌 Diyanet API bağlantısı test ediliyor..."
+        node -e "
+          const DiyanetApiService = require('./src/services/diyanetApi');
+          const api = new DiyanetApiService();
+          api.login().then(() => {
+            console.log('✅ API bağlantısı başarılı');
+            return api.logout();
+          }).catch(err => {
+            console.error('❌ API bağlantı hatası:', err.message);
+            process.exit(1);
+          });
+        "
+
+    - name: GCS Bağlantısını Test Et
+      run: |
+        echo "☁️  Google Cloud Storage bağlantısı test ediliyor..."
+        node -e "
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
+          gcs.testConnection().then(() => {
+            console.log('✅ GCS bağlantısı başarılı');
+          }).catch(err => {
+            console.error('❌ GCS bağlantı hatası:', err.message);
+            process.exit(1);
+          });
+        "
+
+    - name: Şehir İstatistiklerini Göster
+      run: |
+        echo "🏙️  Şehir istatistikleri:"
+        node -e "
+          const CityService = require('./src/services/cityService');
+          const cityService = new CityService();
+          cityService.getStatistics().then(stats => {
+            console.log(\`- Toplam şehir: \${stats.totalCities}\`);
+            console.log(\`- Türkiye şehirleri: \${stats.turkishCities}\`);
+            console.log(\`- Toplam il: \${stats.totalStates}\`);
+            console.log(\`- Toplam ülke: \${stats.totalCountries}\`);
+          });
+        "
+
+    - name: Namaz Vakitlerini Al (Paralel)
+      timeout-minutes: 90
+      run: |
+        echo "🚀 Paralel namaz vakti alma işlemi başlatılıyor..."
+        echo "⚡ ${{ steps.params.outputs.workers }} paralel worker kullanılacak"
+        
+        START_TIME=$(date +%s)
+        
+        if [ "${{ steps.params.outputs.turkey_only }}" = "true" ]; then
+          echo "🇹🇷 Sadece Türkiye şehirleri işlenecek"
+          node src/fetchPrayerTimes.js workers ${{ steps.params.outputs.workers }} ${{ steps.params.outputs.year }} turkey
+        else
+          echo "🌍 Tüm şehirler işlenecek"
+          node src/fetchPrayerTimes.js workers ${{ steps.params.outputs.workers }} ${{ steps.params.outputs.year }}
+        fi
+        
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - START_TIME))
+        MINUTES=$((DURATION / 60))
+        SECONDS=$((DURATION % 60))
+        
+        echo "⏱️  Toplam süre: ${MINUTES}m ${SECONDS}s"
+
+    - name: İşlem Sonuçlarını Kontrol Et
+      if: always()
+      run: |
+        echo "📊 İşlem sonuçları kontrol ediliyor..."
+        
+        # Özet dosyasını kontrol et
+        YEAR="${{ steps.params.outputs.year }}"
+        node -e "
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
+          
+          gcs.downloadFile('summary-$YEAR.json')
+            .then(summary => {
+              console.log('📈 İşlem Özeti:');
+              console.log(\`- Toplam şehir: \${summary.totalCities}\`);
+              console.log(\`- Başarılı: \${summary.successCount}\`);
+              console.log(\`- Hatalı: \${summary.errorCount}\`);
+              console.log(\`- Paralel worker: \${summary.parallelWorkers}\`);
+              console.log(\`- Toplam süre: \${summary.totalTime}s\`);
+              console.log(\`- Ortalama hız: \${Math.round(summary.totalCities / summary.totalTime)} şehir/saniye\`);
+              
+              if (summary.errors && summary.errors.length > 0) {
+                console.log(\`⚠️  \${summary.errors.length} hata tespit edildi\`);
+                summary.errors.slice(0, 5).forEach(err => {
+                  console.log(\`  - Şehir \${err.cityId}: \${err.error}\`);
+                });
+                if (summary.errors.length > 5) {
+                  console.log(\`  ... ve \${summary.errors.length - 5} hata daha\`);
+                }
+              }
+              
+              // Worker detayları
+              if (summary.workerResults) {
+                console.log('\\n👥 Worker Performansı:');
+                summary.workerResults.forEach(worker => {
+                  const successRate = Math.round((worker.successCount / worker.totalCities) * 100);
+                  console.log(\`  - Worker \${worker.workerId}: \${worker.successCount}/\${worker.totalCities} (%\${successRate})\`);
+                });
+              }
+            })
+            .catch(err => {
+              console.error('❌ Özet dosyası okunamadı:', err.message);
+              process.exit(1);
+            });
+        "
+
+    - name: Slack Bildirimi (Başarılı)
+      if: success() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      run: |
+        if [ "$SLACK_WEBHOOK" != "" ]; then
+          YEAR="${{ steps.params.outputs.year }}"
+          WORKERS="${{ steps.params.outputs.workers }}"
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"✅ Namaz Vakitleri Başarıyla Alındı\",
+              \"attachments\": [{
+                \"color\": \"good\",
+                \"fields\": [
+                  {\"title\": \"Yıl\", \"value\": \"$YEAR\", \"short\": true},
+                  {\"title\": \"Paralel Worker\", \"value\": \"$WORKERS\", \"short\": true},
+                  {\"title\": \"Tetikleme\", \"value\": \"${{ github.event_name }}\", \"short\": true},
+                  {\"title\": \"Durum\", \"value\": \"Tamamlandı ✅\", \"short\": true}
+                ]
+              }]
+            }" \
+            $SLACK_WEBHOOK
+        fi
+
+    - name: Slack Bildirimi (Hatalı)
+      if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      run: |
+        if [ "$SLACK_WEBHOOK" != "" ]; then
+          YEAR="${{ steps.params.outputs.year }}"
+          WORKERS="${{ steps.params.outputs.workers }}"
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"❌ Namaz Vakitleri Alma İşlemi Başarısız\",
+              \"attachments\": [{
+                \"color\": \"danger\",
+                \"fields\": [
+                  {\"title\": \"Yıl\", \"value\": \"$YEAR\", \"short\": true},
+                  {\"title\": \"Paralel Worker\", \"value\": \"$WORKERS\", \"short\": true},
+                  {\"title\": \"Tetikleme\", \"value\": \"${{ github.event_name }}\", \"short\": true},
+                  {\"title\": \"Durum\", \"value\": \"Başarısız ❌\", \"short\": true}
+                ]
+              }]
+            }" \
+            $SLACK_WEBHOOK
+        fi
+
+    - name: Temizlik
+      if: always()
+      run: |
+        echo "🧹 Geçici dosyalar temizleniyor..."
+        rm -f namazvaktim-1453-461cbfd17aaf.json
+        echo "✅ Temizlik tamamlandı"
+
+  # Test job - sadece push olayında çalışır
+  test-parallel-system:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Kodu Çek
+      uses: actions/checkout@v4
+
+    - name: Node.js Kur
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Bağımlılıkları Yükle
+      run: npm ci
+
+    - name: GCS Kimlik Bilgilerini Ayarla
+      env:
+        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      run: |
+        echo "$GCS_SERVICE_ACCOUNT_KEY" > namazvaktim-1453-461cbfd17aaf.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=namazvaktim-1453-461cbfd17aaf.json" >> $GITHUB_ENV
+
+    - name: Paralel Sistem Testi
+      run: |
+        echo "🧪 Paralel sistem test ediliyor..."
+        
+        # Test: 5 worker ile 10 şehir
+        echo "Test 1: 5 worker ile İstanbul test"
+        node src/fetchPrayerTimes.js test 34 2024
+        
+        echo "Test 2: Worker gruplandırma testi"
+        node -e "
+          const PrayerTimesFetcher = require('./src/fetchPrayerTimes');
+          const fetcher = new PrayerTimesFetcher();
+          
+          const cityIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+          const groups = fetcher.divideIntoGroups(cityIds, 3);
+          
+          console.log('Test şehir listesi:', cityIds);
+          console.log('3 gruba bölüm:');
+          groups.forEach((group, index) => {
+            console.log(\`Grup \${index + 1}: [\${group.join(', ')}]\`);
+          });
+          
+          // Doğrulama
+          const totalCities = groups.reduce((sum, group) => sum + group.length, 0);
+          if (totalCities !== cityIds.length) {
+            throw new Error('Grup bölümü hatalı!');
+          }
+          
+          console.log('✅ Gruplandırma testi başarılı');
+        "
+
+    - name: Temizlik
+      if: always()
+      run: |
+        rm -f namazvaktim-1453-461cbfd17aaf.json 

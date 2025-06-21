@@ -1,16 +1,19 @@
-# 🕌 Namaz Vakti Backend Servisi
+# 🕌 Namaz Vakti Backend Servisi (Paralel Sistem)
 
-Diyanet API'sinden namaz vakitlerini alan ve Google Cloud Storage'a yükleyen otomatik backend servisi.
+Diyanet API'sinden namaz vakitlerini **20 paralel worker** ile hızlıca alan ve Google Cloud Storage'a yükleyen otomatik backend servisi.
 
 ## 📋 Özellikler
 
+- ⚡ **20 Paralel Worker**: Şehirler 20 gruba bölünerek eş zamanlı işlenir
+- 🚀 **Hızlı İndirme**: Tek yoldan 2-3 saat süren işlem 15-20 dakikaya düşer
 - ✅ Diyanet API ile entegrasyon
-- ✅ Tüm dünya şehirleri desteği
+- ✅ Tüm dünya şehirleri desteği (8,552+ şehir)
 - ✅ Google Cloud Storage entegrasyonu
 - ✅ Otomatik cron job (her yıl 1 Aralık)
 - ✅ GitHub Actions ile CI/CD
-- ✅ Rate limiting ve hata yönetimi
+- ✅ Akıllı rate limiting ve hata yönetimi
 - ✅ Manuel tetikleme seçenekleri
+- 📊 Detaylı worker performans raporları
 
 ## 🚀 Kurulum
 
@@ -59,20 +62,29 @@ npm run dev
 npm start
 ```
 
-### Manuel Namaz Vakti Alma
+### Manuel Namaz Vakti Alma (Paralel Sistem)
 
 ```bash
-# Tüm şehirler için gelecek yıl
-npm run fetch-prayer-times all
+# Tüm şehirler için mevcut yıl (20 paralel worker)
+node src/fetchPrayerTimes.js
 
-# Sadece Türkiye için gelecek yıl
-npm run fetch-prayer-times turkey
+# Belirli yıl için tüm şehirler (20 paralel worker)
+node src/fetchPrayerTimes.js 2025
 
-# Belirli yıl için tüm şehirler
-npm run fetch-prayer-times year 2025
+# Sadece Türkiye şehirleri
+node src/fetchPrayerTimes.js turkey 2025
+
+# Gelecek yıl için otomatik
+node src/fetchPrayerTimes.js next-year
+
+# Worker sayısını özelleştir (5-50 arası)
+node src/fetchPrayerTimes.js workers 30 2025
+
+# Worker sayısı + Türkiye modu
+node src/fetchPrayerTimes.js workers 15 2025 turkey
 
 # Test (tek şehir)
-npm run fetch-prayer-times test 9541
+node src/fetchPrayerTimes.js test 34 2025
 ```
 
 ## 🌐 API Endpoints

@@ -7,6 +7,10 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "fetch-prayer-times": "node src/fetchPrayerTimes.js",
+    "fetch-parallel": "node src/fetchPrayerTimes.js workers 20",
+    "fetch-turkey": "node src/fetchPrayerTimes.js turkey",
+    "fetch-next-year": "node src/fetchPrayerTimes.js next-year",
+    "test-city": "node src/fetchPrayerTimes.js test 34",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

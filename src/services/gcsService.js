@@ -114,6 +114,52 @@ class GCSService {
   }
 
   /**
+   * GCS bağlantısını test et
+   */
+  async testConnection() {
+    try {
+      console.log('GCS bağlantısı test ediliyor...');
+      
+      // Bucket'a erişim testi
+      const [exists] = await this.bucket.exists();
+      if (!exists) {
+        throw new Error(`Bucket '${this.bucketName}' bulunamadı`);
+      }
+      
+      // Basit bir dosya yazma/okuma testi
+      const testFileName = 'connection-test.json';
+      const testData = {
+        timestamp: new Date().toISOString(),
+        test: 'GCS bağlantı testi'
+      };
+      
+      // Test dosyasını yükle
+      await this.uploadFile(testFileName, testData, {
+        description: 'GCS bağlantı testi',
+        type: 'test'
+      });
+      
+      // Test dosyasını oku
+      const downloadedData = await this.downloadFile(testFileName);
+      
+      // Test dosyasını sil
+      await this.deleteFile(testFileName);
+      
+      console.log('✅ GCS bağlantı testi başarılı');
+      return {
+        success: true,
+        bucket: this.bucketName,
+        projectId: this.projectId,
+        testData: downloadedData
+      };
+      
+    } catch (error) {
+      console.error('❌ GCS bağlantı testi başarısız:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Dosya sil
    * @param {string} fileName - Silinecek dosya adı
    */
