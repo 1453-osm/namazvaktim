@@ -125,13 +125,13 @@ function parseTable(html, year, sourceUrl) {
 }
 
 function buildUrlForYear(year) {
-  const nowYear = new Date().getFullYear();
-  if (year <= nowYear + 1) {
-    return `https://vakithesaplama.diyanet.gov.tr/dinigunler.php?yil=${year}`;
+  // 2026 ve sonrası içerik.php (icerik=153 -> 2026)
+  if (year >= BASE_ICERIK_YEAR) {
+    const icerikId = BASE_ICERIK_ID + (year - BASE_ICERIK_YEAR);
+    return `https://vakithesaplama.diyanet.gov.tr/icerik.php?icerik=${icerikId}`;
   }
-
-  const icerikId = BASE_ICERIK_ID + (year - BASE_ICERIK_YEAR);
-  return `https://vakithesaplama.diyanet.gov.tr/icerik.php?icerik=${icerikId}`;
+  // 2025 ve öncesi dinigunler.php
+  return `https://vakithesaplama.diyanet.gov.tr/dinigunler.php?yil=${year}`;
 }
 
 async function fetchYearData(year) {
