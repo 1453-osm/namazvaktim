@@ -147,6 +147,16 @@ async function uploadYearData(gcs, payload) {
   });
 }
 
+async function deleteOldYearIfNeeded(gcs) {
+  const current = new Date().getFullYear();
+  const oldYear = current - 2;
+  const oldFile = gcs.generateReligiousDaysFileName(oldYear);
+  const exists = await gcs.fileExists(oldFile);
+  if (!exists) return false;
+  await gcs.deleteFile(oldFile);
+  return true;
+}
+
 function getManualYears() {
   const current = new Date().getFullYear();
   return [current - 1, current, current + 1, current + 2];
@@ -154,21 +164,10 @@ function getManualYears() {
 
 async function getAutoYear(gcs) {
   const current = new Date().getFullYear();
-  const files = await gcs.listFiles('religious-days-');
-  const yearsInBucket = files
-    .map(name => {
-      const match = name.match(/religious-days-(\d{4})\.json$/);
-      return match ? Number(match[1]) : null;
-    })
-    .filter(Boolean);
-
-  const currentExists = yearsInBucket.includes(current);
-  if (!currentExists) return current;
-
-  const next = current + 1;
-  if (!yearsInBucket.includes(next)) return next;
-
-  return null;
+  const target = current + 1; // sadece gelecekteki yıl
+  const fileName = gcs.generateReligiousDaysFileName(target);
+  const exists = await gcs.fileExists(fileName);
+  return exists ? null : target;
 }
 
 function parseYearArgs(raw) {
@@ -188,7 +187,12 @@ async function main() {
   if (mode === 'auto') {
     const targetYear = await getAutoYear(gcs);
     if (!targetYear) {
-      console.log('Yeni yıl bulunamadı veya tüm hedef yıllar mevcut, işlem yapılmadı.');
+      console.log('Yeni (gelecek) yıl için eksik veri yok, işlem yapılmadı.');
+      // Eski dosya temizliği yine de yapılabilir
+      const removed = await deleteOldYearIfNeeded(gcs);
+      if (removed) {
+        console.log('✅ Eski yıl (2 yıl önce) dosyası silindi.');
+      }
       return;
     }
     years = [targetYear];
@@ -204,6 +208,15 @@ async function main() {
     console.log(`   ${payload.events.length} kayıt bulundu, yükleniyor...`);
     await uploadYearData(gcs, payload);
     console.log(`✅ ${year} yılı yüklendi.`);
+  }
+
+  if (mode === 'auto') {
+    const removed = await deleteOldYearIfNeeded(gcs);
+    if (removed) {
+      console.log('✅ Eski yıl (2 yıl önce) dosyası silindi.');
+    } else {
+      console.log('ℹ️ Silinecek eski yıl dosyası bulunamadı.');
+    }
   }
 
   console.log('Tamamlandı.');
