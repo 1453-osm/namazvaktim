@@ -36,6 +36,13 @@ const config = {
     outputFormat: 'json',
     // Dosya adı formatı: prayer-times-{cityId}-{year}.json
     fileNamePattern: 'prayer-times-{cityId}-{year}.json'
+  },
+
+  // Dini günler (kandil/bayram) çıktısı
+  religiousDays: {
+    outputFormat: 'json',
+    // Dosya adı formatı: religious-days-{year}.json
+    fileNamePattern: 'religious-days-{year}.json'
   }
 };
 

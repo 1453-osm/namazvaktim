@@ -207,6 +207,15 @@ class GCSService {
   }
 
   /**
+   * Dini günler için dosya adı oluştur
+   * @param {number} year - Yıl
+   */
+  generateReligiousDaysFileName(year) {
+    return config.religiousDays.fileNamePattern
+      .replace('{year}', year);
+  }
+
+  /**
    * Şehir bilgileri dosyasını yükle
    * @param {Array} cities - Şehir listesi
    */
@@ -246,6 +255,32 @@ class GCSService {
       year: year.toString()
     };
     
+    return await this.uploadFile(fileName, data, metadata);
+  }
+
+  /**
+   * Dini günler dosyasını yükle
+   * @param {number} year - Yıl
+   * @param {Array} events - Filtrelenmiş dini günler
+   * @param {Object} extra - Ek metadata/özellikler
+   */
+  async uploadReligiousDays(year, events = [], extra = {}) {
+    const fileName = this.generateReligiousDaysFileName(year);
+
+    const data = {
+      year,
+      totalEvents: events.length,
+      generatedAt: new Date().toISOString(),
+      events,
+      ...extra
+    };
+
+    const metadata = {
+      description: `${year} yılı dini günler`,
+      uploadedAt: new Date().toISOString(),
+      year: year.toString()
+    };
+
     return await this.uploadFile(fileName, data, metadata);
   }
 }

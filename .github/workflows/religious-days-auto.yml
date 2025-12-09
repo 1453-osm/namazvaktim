@@ -1,0 +1,30 @@
+name: Dini Günler (Otomatik)
+
+on:
+  schedule:
+    - cron: "0 0 1 1 *" # Her 1 Ocak 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  fetch-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Fetch missing latest year
+        env:
+          GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+          GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+        run: |
+          npm run fetch-religious-days-auto
+
