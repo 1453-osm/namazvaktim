@@ -53,7 +53,7 @@ function detectArefeType(hijriMonthRaw) {
 
 function parseMiladiMonthYear(raw, fallbackYear) {
   const cleaned = normalizeText(raw);
-  const match = cleaned.match(/([A-ZÇĞİÖŞÜ]+)-?(\d{4})/);
+  const match = cleaned.match(/([A-ZÇĞİÖŞÜ]+)\s*-?\s*(\d{4})/);
   if (match) {
     return {
       month: match[1],
@@ -64,15 +64,24 @@ function parseMiladiMonthYear(raw, fallbackYear) {
 }
 
 async function fetchHtml(url) {
-  const { data } = await axios.get(url, { timeout: 20000 });
+  const { data } = await axios.get(url, {
+    timeout: 20000,
+    headers: {
+      // Bazı sayfalar User-Agent olmadan bakım sayfasına yönleniyor
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    },
+    maxRedirects: 5
+  });
   return data;
 }
 
 function parseTable(html, year, sourceUrl) {
   const $ = cheerio.load(html);
+  // İçerik sayfalarında ilk tablo hedef tablo; yoksa hiçbir tablo yoktur
   const table = $('table').first();
   if (!table || table.length === 0) {
-    throw new Error('Sayfada tablo bulunamadı');
+    const title = $('title').text();
+    throw new Error(`Sayfada tablo bulunamadı (title="${title || '—'}")`);
   }
 
   const rows = [];
