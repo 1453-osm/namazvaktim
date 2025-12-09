@@ -164,7 +164,7 @@ function getManualYears() {
 
 async function getAutoYear(gcs) {
   const current = new Date().getFullYear();
-  const target = current + 1; // sadece gelecekteki yıl
+  const target = current + 2; // sadece 2 yıl sonrası (gelecek yıl)
   const fileName = gcs.generateReligiousDaysFileName(target);
   const exists = await gcs.fileExists(fileName);
   return exists ? null : target;
