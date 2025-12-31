@@ -24,8 +24,19 @@ const TARGET_EVENTS = [
   'REGAİB KANDİLİ'
 ].map(normalizeText);
 
-const BASE_ICERIK_ID = 153; // 2026
-const BASE_ICERIK_YEAR = 2026;
+// İçerik.php formatına geçiş yılı ve o yılın içerik ID'si
+// Bu değerler Diyanet sitesinin yapısına göre ayarlanmalıdır
+// 2026 yılı için içerik ID'si 153, her yıl için 1 artar
+const getBaseIcerikConfig = () => {
+  const currentYear = new Date().getFullYear();
+  // 2026 ve sonrası için içerik.php kullanılıyor
+  const BASE_ICERIK_YEAR = 2026;
+  const BASE_ICERIK_ID = 153;
+  
+  // Eğer gelecekte bu değerler değişirse, burada güncellenebilir
+  // Örneğin: 2030'dan sonra farklı bir sistem gelirse
+  return { BASE_ICERIK_YEAR, BASE_ICERIK_ID };
+};
 
 function normalizeText(text) {
   return (text || '')
@@ -125,12 +136,15 @@ function parseTable(html, year, sourceUrl) {
 }
 
 function buildUrlForYear(year) {
-  // 2026 ve sonrası içerik.php (icerik=153 -> 2026)
+  const { BASE_ICERIK_YEAR, BASE_ICERIK_ID } = getBaseIcerikConfig();
+  
+  // BASE_ICERIK_YEAR ve sonrası için içerik.php formatı kullanılıyor
+  // Her yıl için içerik ID'si 1 artar
   if (year >= BASE_ICERIK_YEAR) {
     const icerikId = BASE_ICERIK_ID + (year - BASE_ICERIK_YEAR);
     return `https://vakithesaplama.diyanet.gov.tr/icerik.php?icerik=${icerikId}`;
   }
-  // 2025 ve öncesi dinigunler.php
+  // BASE_ICERIK_YEAR öncesi için eski format (dinigunler.php)
   return `https://vakithesaplama.diyanet.gov.tr/dinigunler.php?yil=${year}`;
 }
 
