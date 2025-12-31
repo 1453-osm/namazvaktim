@@ -41,7 +41,9 @@ class GCSService {
     }
 
     this.storage = new Storage(storageConfig);
-    this.bucket = this.storage.bucket(config.gcs.bucketName);
+    this.bucketName = config.gcs.bucketName;
+    this.projectId = config.gcs.projectId;
+    this.bucket = this.storage.bucket(this.bucketName);
   }
 
   /**
