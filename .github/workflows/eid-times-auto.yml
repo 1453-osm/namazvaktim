@@ -1,0 +1,30 @@
+name: Bayram Namazı Vakitleri (Aylık)
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # Her ayın 1'i saat 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  fetch-eid-times:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Fetch eid prayer times (all cities)
+        env:
+          GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+          GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+        run: |
+          npm run fetch-eid-times

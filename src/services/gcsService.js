@@ -15,15 +15,15 @@ class GCSService {
         console.log('🔍 GCS_SERVICE_ACCOUNT_KEY environment variable bulundu');
         console.log('📏 Key uzunluğu:', process.env.GCS_SERVICE_ACCOUNT_KEY.length);
         console.log('🔤 Key başlangıcı:', process.env.GCS_SERVICE_ACCOUNT_KEY.substring(0, 50) + '...');
-        
+
         // JSON string'i doğrudan parse et (base64 decode gerekmiyor)
         const keyData = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
-        
+
         // Key'in gerekli alanlarını kontrol et
         if (!keyData.type || !keyData.project_id || !keyData.private_key) {
           throw new Error('Service account key\'de gerekli alanlar eksik (type, project_id, private_key)');
         }
-        
+
         storageConfig.credentials = keyData;
         console.log('🔑 GCS Service Account Key environment variable\'dan yüklendi');
         console.log('📋 Project ID:', keyData.project_id);
@@ -55,12 +55,12 @@ class GCSService {
   async uploadFile(fileName, data, metadata = {}) {
     try {
       console.log(`GCS'ye dosya yükleniyor: ${fileName}`);
-      
+
       const file = this.bucket.file(fileName);
-      
+
       // JSON verisini string'e çevir
       const jsonString = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      
+
       // Dosyayı yükle
       await file.save(jsonString, {
         metadata: {
@@ -85,13 +85,13 @@ class GCSService {
   async downloadFile(fileName) {
     try {
       console.log(`GCS'den dosya indiriliyor: ${fileName}`);
-      
+
       const file = this.bucket.file(fileName);
       const [contents] = await file.download();
-      
+
       // JSON verisini parse et
       const data = JSON.parse(contents.toString());
-      
+
       console.log(`Dosya başarıyla indirildi: ${fileName}`);
       return data;
     } catch (error) {
@@ -121,32 +121,32 @@ class GCSService {
   async testConnection() {
     try {
       console.log('GCS bağlantısı test ediliyor...');
-      
+
       // Bucket'a erişim testi
       const [exists] = await this.bucket.exists();
       if (!exists) {
         throw new Error(`Bucket '${this.bucketName}' bulunamadı`);
       }
-      
+
       // Basit bir dosya yazma/okuma testi
       const testFileName = 'connection-test.json';
       const testData = {
         timestamp: new Date().toISOString(),
         test: 'GCS bağlantı testi'
       };
-      
+
       // Test dosyasını yükle
       await this.uploadFile(testFileName, testData, {
         description: 'GCS bağlantı testi',
         type: 'test'
       });
-      
+
       // Test dosyasını oku
       const downloadedData = await this.downloadFile(testFileName);
-      
+
       // Test dosyasını sil
       await this.deleteFile(testFileName);
-      
+
       console.log('✅ GCS bağlantı testi başarılı');
       return {
         success: true,
@@ -154,7 +154,7 @@ class GCSService {
         projectId: this.projectId,
         testData: downloadedData
       };
-      
+
     } catch (error) {
       console.error('❌ GCS bağlantı testi başarısız:', error.message);
       throw error;
@@ -168,10 +168,10 @@ class GCSService {
   async deleteFile(fileName) {
     try {
       console.log(`GCS'den dosya siliniyor: ${fileName}`);
-      
+
       const file = this.bucket.file(fileName);
       await file.delete();
-      
+
       console.log(`Dosya başarıyla silindi: ${fileName}`);
       return true;
     } catch (error) {
@@ -189,7 +189,7 @@ class GCSService {
       const [files] = await this.bucket.getFiles({
         prefix: prefix
       });
-      
+
       return files.map(file => file.name);
     } catch (error) {
       console.error('Dosya listeleme hatası:', error.message);
@@ -218,6 +218,49 @@ class GCSService {
   }
 
   /**
+   * Bayram namazı vakitleri için dosya adı oluştur
+   * @param {number} cityId - Şehir ID'si
+   */
+  generateEidTimesFileName(cityId) {
+    return config.eidTimes.fileNamePattern
+      .replace('{cityId}', cityId);
+  }
+
+  /**
+   * Bayram namazı vakitleri dosyasını yükle
+   * @param {number} cityId - Şehir ID'si
+   * @param {Object} eidData - Bayram namazı verileri
+   * @param {Object} cityInfo - Şehir bilgileri
+   */
+  async uploadEidTimes(cityId, eidData, cityInfo = {}) {
+    const fileName = this.generateEidTimesFileName(cityId);
+
+    const data = {
+      cityId,
+      cityInfo,
+      generatedAt: new Date().toISOString(),
+      eidAlFitr: {
+        hijriDate: eidData.eidAlFitrHijri,
+        date: eidData.eidAlFitrDate,
+        time: eidData.eidAlFitrTime
+      },
+      eidAlAdha: {
+        hijriDate: eidData.eidAlAdhaHijri,
+        date: eidData.eidAlAdhaDate,
+        time: eidData.eidAlAdhaTime
+      }
+    };
+
+    const metadata = {
+      description: `${cityInfo.fullName || cityId} bayram namazı vakitleri`,
+      uploadedAt: new Date().toISOString(),
+      cityId: cityId.toString()
+    };
+
+    return await this.uploadFile(fileName, data, metadata);
+  }
+
+  /**
    * Şehir bilgileri dosyasını yükle
    * @param {Array} cities - Şehir listesi
    */
@@ -227,7 +270,7 @@ class GCSService {
       description: 'Şehir bilgileri',
       uploadedAt: new Date().toISOString()
     };
-    
+
     return await this.uploadFile(fileName, cities, metadata);
   }
 
@@ -240,7 +283,7 @@ class GCSService {
    */
   async uploadPrayerTimes(cityId, year, prayerTimes, cityInfo = {}) {
     const fileName = this.generatePrayerTimeFileName(cityId, year);
-    
+
     const data = {
       cityId: cityId,
       cityInfo: cityInfo,
@@ -249,14 +292,14 @@ class GCSService {
       generatedAt: new Date().toISOString(),
       prayerTimes: prayerTimes
     };
-    
+
     const metadata = {
       description: `${cityInfo.name || cityId} şehri için ${year} yılı namaz vakitleri`,
       uploadedAt: new Date().toISOString(),
       cityId: cityId.toString(),
       year: year.toString()
     };
-    
+
     return await this.uploadFile(fileName, data, metadata);
   }
 
@@ -287,4 +330,4 @@ class GCSService {
   }
 }
 
-module.exports = GCSService; 
+module.exports = GCSService;

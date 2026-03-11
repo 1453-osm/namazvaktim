@@ -7,7 +7,8 @@ const config = {
     endpoints: {
       login: '/Auth/Login',
       refreshToken: '/Auth/RefreshToken',
-      dateRange: '/api/PrayerTime/DateRange'
+      dateRange: '/api/PrayerTime/DateRange',
+      eid: '/api/PrayerTime/Eid'
     },
     credentials: {
       username: 'ozavciosman17@gmail.com',
@@ -36,6 +37,12 @@ const config = {
     outputFormat: 'json',
     // Dosya adı formatı: prayer-times-{cityId}-{year}.json
     fileNamePattern: 'prayer-times-{cityId}-{year}.json'
+  },
+
+  // Bayram namazı vakitleri
+  eidTimes: {
+    outputFormat: 'json',
+    fileNamePattern: 'eid-times-{cityId}.json'
   },
 
   // Dini günler (kandil/bayram) çıktısı

@@ -205,6 +205,52 @@ class DiyanetApiService {
   }
 
   /**
+   * Belirli bir şehir için bayram namazı vakitlerini alır
+   * @param {number} cityId - Şehir ID'si
+   * @param {number} retryCount - Yeniden deneme sayısı (iç kullanım)
+   */
+  async getEidTimes(cityId, retryCount = 0) {
+    try {
+      if (!this.accessToken) {
+        await this.login();
+      }
+
+      const response = await axios.get(
+        `${this.baseUrl}${config.diyanet.endpoints.eid}/${cityId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      let eidData = response.data;
+      if (response.data && response.data.data) {
+        eidData = response.data.data;
+      }
+
+      return eidData;
+    } catch (error) {
+      if (retryCount >= 3) {
+        throw error;
+      }
+
+      if (error.response && error.response.status === 401) {
+        try {
+          await this.refreshAccessToken();
+          return this.getEidTimes(cityId, retryCount + 1);
+        } catch (refreshError) {
+          await this.login();
+          return this.getEidTimes(cityId, retryCount + 1);
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  /**
    * Diyanet API'sinden çıkış yapar (token'ları temizler)
    */
   logout() {
