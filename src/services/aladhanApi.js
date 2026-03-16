@@ -32,19 +32,6 @@ class AladhanApiService {
   constructor() {
     this.baseUrl = 'https://api.aladhan.com/v1';
     this.requestCount = 0;
-    this.minRequestInterval = 250; // ms - istekler arası minimum bekleme
-    this._queue = Promise.resolve(); // Kuyruk tabanlı rate limiter
-  }
-
-  /**
-   * Kuyruk tabanlı rate limiting — tüm istekleri sıraya alır
-   */
-  async waitForRateLimit() {
-    this._queue = this._queue.then(() =>
-      new Promise(resolve => setTimeout(resolve, this.minRequestInterval))
-    );
-    await this._queue;
-    this.requestCount++;
   }
 
   /**
@@ -57,7 +44,7 @@ class AladhanApiService {
    */
   async getYearlyPrayerTimes(lat, lon, method, year, retryCount = 0) {
     try {
-      await this.waitForRateLimit();
+      this.requestCount++;
 
       const response = await axios.get(`${this.baseUrl}/calendar/${year}`, {
         params: {

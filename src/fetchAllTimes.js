@@ -150,6 +150,9 @@ class AllTimesFetcher {
   async fetchAladhanForGroup(cities, method, year, workerId) {
     const results = { workerId, method, success: 0, error: 0, errors: [] };
 
+    // Worker'lar kademeli başlasın (stagger)
+    await new Promise(r => setTimeout(r, workerId * 200));
+
     for (let i = 0; i < cities.length; i++) {
       const city = cities[i];
       try {
@@ -174,11 +177,14 @@ class AllTimesFetcher {
         if (results.success % 50 === 0) {
           console.log(`[A${method}-W${workerId}] ${results.success}/${cities.length}`);
         }
+
+        // İstekler arası bekleme
+        await new Promise(r => setTimeout(r, 150));
       } catch (error) {
         results.error++;
         results.errors.push({ cityId: city.id, error: error.message });
         if (error.message.includes('429')) {
-          await new Promise(r => setTimeout(r, 5000));
+          await new Promise(r => setTimeout(r, 10000));
         }
       }
     }
