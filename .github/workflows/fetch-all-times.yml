@@ -1,0 +1,82 @@
+name: Fetch All Times (Yeni Sistem)
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Komut'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+        - test
+        - diyanet
+        - aladhan
+        - all
+      method_id:
+        description: 'Aladhan metod ID (sadece aladhan komutu için, boş = tüm metodlar)'
+        required: false
+        default: ''
+        type: string
+      city_id:
+        description: 'Şehir ID (sadece test komutu için)'
+        required: false
+        default: '9541'
+        type: string
+      year:
+        description: 'Yıl'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_NEW_BUCKET: nvvakitler
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Determine year
+        id: year
+        run: |
+          if [ -n "${{ github.event.inputs.year }}" ]; then
+            echo "YEAR=${{ github.event.inputs.year }}" >> $GITHUB_OUTPUT
+          else
+            echo "YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run fetch
+        run: |
+          COMMAND="${{ github.event.inputs.command }}"
+          YEAR="${{ steps.year.outputs.YEAR }}"
+          METHOD="${{ github.event.inputs.method_id }}"
+          CITY="${{ github.event.inputs.city_id }}"
+
+          echo "Komut: $COMMAND | Yıl: $YEAR | Bucket: $GCS_NEW_BUCKET"
+
+          if [ "$COMMAND" = "test" ]; then
+            node src/fetchAllTimes.js test ${CITY:-9541} $YEAR
+          elif [ "$COMMAND" = "diyanet" ]; then
+            node src/fetchAllTimes.js diyanet $YEAR
+          elif [ "$COMMAND" = "aladhan" ] && [ -n "$METHOD" ]; then
+            node src/fetchAllTimes.js aladhan $METHOD $YEAR
+          elif [ "$COMMAND" = "aladhan" ]; then
+            node src/fetchAllTimes.js aladhan $YEAR
+          elif [ "$COMMAND" = "all" ]; then
+            node src/fetchAllTimes.js all $YEAR
+          fi
