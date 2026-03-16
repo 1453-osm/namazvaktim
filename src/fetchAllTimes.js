@@ -6,7 +6,7 @@ const config = require('./config/config');
 
 const NEW_BUCKET = process.env.GCS_NEW_BUCKET || 'nvvakitler';
 const DIYANET_WORKERS = 50;
-const ALADHAN_WORKERS = 10; // Rate limit nedeniyle düşük tutulmalı
+const ALADHAN_WORKERS = 50;
 
 class AllTimesFetcher {
   constructor() {
