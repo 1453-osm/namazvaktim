@@ -5,7 +5,8 @@ const CityService = require('./services/cityService');
 const config = require('./config/config');
 
 const NEW_BUCKET = process.env.GCS_NEW_BUCKET || 'nvvakitler';
-const PARALLEL_WORKERS = 50;
+const DIYANET_WORKERS = 50;
+const ALADHAN_WORKERS = 10; // Rate limit nedeniyle düşük tutulmalı
 
 class AllTimesFetcher {
   constructor() {
@@ -133,7 +134,7 @@ class AllTimesFetcher {
     console.log(`\n=== DİYANET (Metod 0) - ${cities.length} şehir ===`);
     await this.diyanetApi.login();
 
-    const groups = this.divideIntoGroups(cities, PARALLEL_WORKERS);
+    const groups = this.divideIntoGroups(cities, DIYANET_WORKERS);
     console.log(`${groups.length} worker başlatılıyor...`);
 
     const results = await Promise.all(
@@ -189,7 +190,7 @@ class AllTimesFetcher {
   async fetchAladhanMethod(method, year, cities) {
     console.log(`\n=== ALADHAN Metod ${method} (${AladhanApiService.getMethodName(method)}) - ${cities.length} şehir ===`);
 
-    const groups = this.divideIntoGroups(cities, PARALLEL_WORKERS);
+    const groups = this.divideIntoGroups(cities, ALADHAN_WORKERS);
     console.log(`${groups.length} worker başlatılıyor...`);
 
     const results = await Promise.all(

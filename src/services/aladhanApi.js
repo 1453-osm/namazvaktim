@@ -32,20 +32,18 @@ class AladhanApiService {
   constructor() {
     this.baseUrl = 'https://api.aladhan.com/v1';
     this.requestCount = 0;
-    this.lastRequestTime = 0;
-    this.minRequestInterval = 500; // ms - istekler arası minimum bekleme
+    this.minRequestInterval = 250; // ms - istekler arası minimum bekleme
+    this._queue = Promise.resolve(); // Kuyruk tabanlı rate limiter
   }
 
   /**
-   * Rate limiting için bekleme
+   * Kuyruk tabanlı rate limiting — tüm istekleri sıraya alır
    */
   async waitForRateLimit() {
-    const now = Date.now();
-    const elapsed = now - this.lastRequestTime;
-    if (elapsed < this.minRequestInterval) {
-      await new Promise(resolve => setTimeout(resolve, this.minRequestInterval - elapsed));
-    }
-    this.lastRequestTime = Date.now();
+    this._queue = this._queue.then(() =>
+      new Promise(resolve => setTimeout(resolve, this.minRequestInterval))
+    );
+    await this._queue;
     this.requestCount++;
   }
 
