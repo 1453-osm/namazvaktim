@@ -3,54 +3,40 @@ name: Fetch All Times (Yeni Sistem)
 on:
   workflow_dispatch:
     inputs:
-      command:
-        description: 'Komut'
+      mode:
+        description: 'Çalışma modu'
         required: true
         default: 'test'
         type: choice
         options:
         - test
-        - diyanet
-        - aladhan
         - all
+        - diyanet
+        - aladhan-all
+        - aladhan-tek
       method_id:
-        description: 'Aladhan metod ID (sadece aladhan komutu için, boş = tüm metodlar)'
+        description: 'Aladhan metod ID (sadece aladhan-tek için)'
         required: false
         default: ''
         type: string
       city_id:
-        description: 'Şehir ID (sadece test komutu için)'
+        description: 'Şehir ID (sadece test için)'
         required: false
         default: '9541'
         type: string
       year:
-        description: 'Yıl'
+        description: 'Yıl (boş = mevcut yıl)'
         required: false
         default: ''
         type: string
 
 jobs:
-  fetch:
+  # --- Yıl hesapla (diğer job'lar bunu kullanır) ---
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-    env:
-      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-      GCS_NEW_BUCKET: nvvakitler
-      NODE_ENV: production
-
+    outputs:
+      year: ${{ steps.year.outputs.YEAR }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install deps
-        run: npm ci
-
       - name: Determine year
         id: year
         run: |
@@ -60,23 +46,87 @@ jobs:
             echo "YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run fetch
-        run: |
-          COMMAND="${{ github.event.inputs.command }}"
-          YEAR="${{ steps.year.outputs.YEAR }}"
-          METHOD="${{ github.event.inputs.method_id }}"
-          CITY="${{ github.event.inputs.city_id }}"
+  # --- Test: tek şehir, tüm metodlar ---
+  test:
+    if: github.event.inputs.mode == 'test'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_NEW_BUCKET: nvvakitler
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Test single city
+        run: node src/fetchAllTimes.js test ${{ github.event.inputs.city_id || '9541' }} ${{ needs.prepare.outputs.year }}
 
-          echo "Komut: $COMMAND | Yıl: $YEAR | Bucket: $GCS_NEW_BUCKET"
+  # --- Diyanet (Metod 0): tüm şehirler ---
+  diyanet:
+    if: github.event.inputs.mode == 'all' || github.event.inputs.mode == 'diyanet'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_NEW_BUCKET: nvvakitler
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Fetch Diyanet (Metod 0)
+        run: node src/fetchAllTimes.js diyanet ${{ needs.prepare.outputs.year }}
 
-          if [ "$COMMAND" = "test" ]; then
-            node src/fetchAllTimes.js test ${CITY:-9541} $YEAR
-          elif [ "$COMMAND" = "diyanet" ]; then
-            node src/fetchAllTimes.js diyanet $YEAR
-          elif [ "$COMMAND" = "aladhan" ] && [ -n "$METHOD" ]; then
-            node src/fetchAllTimes.js aladhan $METHOD $YEAR
-          elif [ "$COMMAND" = "aladhan" ]; then
-            node src/fetchAllTimes.js aladhan $YEAR
-          elif [ "$COMMAND" = "all" ]; then
-            node src/fetchAllTimes.js all $YEAR
-          fi
+  # --- Aladhan: her metod ayrı job (matrix) ---
+  aladhan:
+    if: github.event.inputs.mode == 'all' || github.event.inputs.mode == 'aladhan-all'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        method: [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_NEW_BUCKET: nvvakitler
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Fetch Aladhan (Metod ${{ matrix.method }})
+        run: node src/fetchAllTimes.js aladhan ${{ matrix.method }} ${{ needs.prepare.outputs.year }}
+
+  # --- Aladhan tek metod ---
+  aladhan-tek:
+    if: github.event.inputs.mode == 'aladhan-tek'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+      GCS_NEW_BUCKET: nvvakitler
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Fetch Aladhan (Metod ${{ github.event.inputs.method_id }})
+        run: node src/fetchAllTimes.js aladhan ${{ github.event.inputs.method_id }} ${{ needs.prepare.outputs.year }}
