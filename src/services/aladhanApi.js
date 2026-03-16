@@ -33,7 +33,7 @@ class AladhanApiService {
     this.baseUrl = 'https://api.aladhan.com/v1';
     this.requestCount = 0;
     this.lastRequestTime = 0;
-    this.minRequestInterval = 100; // ms - istekler arası minimum bekleme
+    this.minRequestInterval = 500; // ms - istekler arası minimum bekleme
   }
 
   /**
@@ -97,10 +97,18 @@ class AladhanApiService {
         throw error;
       }
 
-      // Rate limit veya geçici hata durumunda bekleyip tekrar dene
-      if (error.response && (error.response.status === 429 || error.response.status >= 500)) {
-        const waitTime = Math.pow(2, retryCount) * 1000; // Exponential backoff
-        console.log(`  Hata ${error.response.status}, ${waitTime}ms beklenip tekrar denenecek...`);
+      // Rate limit durumunda uzun bekle
+      if (error.response && error.response.status === 429) {
+        const waitTime = Math.pow(2, retryCount) * 10000; // 10s, 20s, 40s
+        console.log(`  429 Rate limit, ${waitTime / 1000}s bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return this.getYearlyPrayerTimes(lat, lon, method, year, retryCount + 1);
+      }
+
+      // Sunucu hatası
+      if (error.response && error.response.status >= 500) {
+        const waitTime = Math.pow(2, retryCount) * 2000;
+        console.log(`  Hata ${error.response.status}, ${waitTime / 1000}s bekleniyor...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         return this.getYearlyPrayerTimes(lat, lon, method, year, retryCount + 1);
       }
