@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 0 1 1 *" # Her 1 Ocak 00:00 UTC
   workflow_dispatch:
+    inputs:
+      years:
+        description: "Virgülle ayrılmış yıllar (boş ise otomatik mod: eksik olan en güncel yıl)"
+        required: false
+        default: ""
 
 jobs:
   fetch-latest:
@@ -21,10 +26,15 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Fetch missing latest year
+      - name: Fetch religious days
         env:
           GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
           GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
         run: |
-          npm run fetch-religious-days-auto
+          YEARS_INPUT="${{ github.event.inputs.years }}"
+          if [ -n "$YEARS_INPUT" ]; then
+            npm run fetch-religious-days -- --years="$YEARS_INPUT"
+          else
+            npm run fetch-religious-days-auto
+          fi
 

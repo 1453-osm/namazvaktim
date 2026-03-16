@@ -1,9 +1,14 @@
-name: Fetch Current Year Prayer Times
+name: Fetch Prayer Times (Manuel)
 
 on:
   # Sadece manuel tetikleme
   workflow_dispatch:
     inputs:
+      year:
+        description: 'Hangi yıl için veri alınacak? (boş = mevcut yıl)'
+        required: false
+        default: ''
+        type: string
       scope:
         description: 'Hangi şehirler için veri alınsın?'
         required: true
@@ -42,37 +47,42 @@ jobs:
       
 
         
-    - name: Get current year
+    - name: Determine year
       id: year
-      run: echo "CURRENT_YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
-        
-    - name: Fetch prayer times (All cities - Current Year)
+      run: |
+        if [ -n "${{ github.event.inputs.year }}" ]; then
+          echo "TARGET_YEAR=${{ github.event.inputs.year }}" >> $GITHUB_OUTPUT
+        else
+          echo "TARGET_YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Fetch prayer times (All cities)
       if: github.event.inputs.scope == 'all'
-      run: npm run fetch-prayer-times year ${{ steps.year.outputs.CURRENT_YEAR }}
-      
-    - name: Fetch prayer times (Turkey only - Current Year)
+      run: npm run fetch-prayer-times year ${{ steps.year.outputs.TARGET_YEAR }}
+
+    - name: Fetch prayer times (Turkey only)
       if: github.event.inputs.scope == 'turkey'
       run: npm run fetch-prayer-times turkey
       env:
-        FORCE_YEAR: ${{ steps.year.outputs.CURRENT_YEAR }}
-      
-    - name: Fetch prayer times (Test - Current Year)
+        FORCE_YEAR: ${{ steps.year.outputs.TARGET_YEAR }}
+
+    - name: Fetch prayer times (Test)
       if: github.event.inputs.scope == 'test'
-      run: npm run fetch-prayer-times test ${{ github.event.inputs.test_city_id || '9541' }}
+      run: npm run fetch-prayer-times test ${{ github.event.inputs.test_city_id || '9541' }} ${{ steps.year.outputs.TARGET_YEAR }}
       
 
         
     - name: Notify completion
       if: success()
       run: |
-        echo "✅ ${{ steps.year.outputs.CURRENT_YEAR }} yılı namaz vakitleri başarıyla alındı!"
+        echo "✅ ${{ steps.year.outputs.TARGET_YEAR }} yılı namaz vakitleri başarıyla alındı!"
         echo "📅 Tarih: $(date)"
         echo "🌍 Kapsam: ${{ github.event.inputs.scope }}"
-        echo "📊 İşlenen yıl: ${{ steps.year.outputs.CURRENT_YEAR }}"
+        echo "📊 İşlenen yıl: ${{ steps.year.outputs.TARGET_YEAR }}"
         
     - name: Notify failure
       if: failure()
       run: |
-        echo "❌ ${{ steps.year.outputs.CURRENT_YEAR }} yılı namaz vakitleri alma işlemi başarısız!"
+        echo "❌ ${{ steps.year.outputs.TARGET_YEAR }} yılı namaz vakitleri alma işlemi başarısız!"
         echo "📅 Tarih: $(date)"
         echo "🔍 Loglara bakın: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" 
