@@ -31,8 +31,11 @@ jobs:
   check-and-trigger:
     runs-on: ubuntu-latest
     env:
-      GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-      GCS_BUCKET_NAME: namazvaktimdepo
+      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
+      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
+      OCI_NAMESPACE: ax4vnct8ysku
+      OCI_REGION: me-jeddah-1
+      OCI_BUCKET_NAME: namazvaktimdepo
       NODE_ENV: production
 
     steps:

@@ -35,7 +35,13 @@ jobs:
   fetch-prayer-times:
     runs-on: ubuntu-latest
     timeout-minutes: 120  # 2 saat timeout (paralel olduğu için daha kısa)
-    
+    env:
+      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
+      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
+      OCI_NAMESPACE: ax4vnct8ysku
+      OCI_REGION: me-jeddah-1
+      OCI_BUCKET_NAME: namazvaktimdepo
+
     strategy:
       fail-fast: false  # Bir hata tüm işlemi durdurmasın
     
@@ -51,13 +57,6 @@ jobs:
 
     - name: Bağımlılıkları Yükle
       run: npm ci
-
-    - name: GCS Kimlik Bilgilerini Ayarla
-      env:
-        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-      run: |
-        echo "$GCS_SERVICE_ACCOUNT_KEY" > namazvaktim-1453-461cbfd17aaf.json
-        echo "GOOGLE_APPLICATION_CREDENTIALS=namazvaktim-1453-461cbfd17aaf.json" >> $GITHUB_ENV
 
     - name: Parametreleri Belirle
       id: params
@@ -264,19 +263,18 @@ jobs:
             $SLACK_WEBHOOK
         fi
 
-    - name: Temizlik
-      if: always()
-      run: |
-        echo "🧹 Geçici dosyalar temizleniyor..."
-        rm -f namazvaktim-1453-461cbfd17aaf.json
-        echo "✅ Temizlik tamamlandı"
-
   # Test job - sadece push olayında çalışır
   test-parallel-system:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+    env:
+      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
+      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
+      OCI_NAMESPACE: ax4vnct8ysku
+      OCI_REGION: me-jeddah-1
+      OCI_BUCKET_NAME: namazvaktimdepo
+
     steps:
     - name: Kodu Çek
       uses: actions/checkout@v4
@@ -289,13 +287,6 @@ jobs:
 
     - name: Bağımlılıkları Yükle
       run: npm ci
-
-    - name: GCS Kimlik Bilgilerini Ayarla
-      env:
-        GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-      run: |
-        echo "$GCS_SERVICE_ACCOUNT_KEY" > namazvaktim-1453-461cbfd17aaf.json
-        echo "GOOGLE_APPLICATION_CREDENTIALS=namazvaktim-1453-461cbfd17aaf.json" >> $GITHUB_ENV
 
     - name: Paralel Sistem Testi
       run: |
@@ -328,7 +319,3 @@ jobs:
           console.log('✅ Gruplandırma testi başarılı');
         "
 
-    - name: Temizlik
-      if: always()
-      run: |
-        rm -f namazvaktim-1453-461cbfd17aaf.json 

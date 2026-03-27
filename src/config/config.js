@@ -16,11 +16,13 @@ const config = {
     }
   },
 
-  // Google Cloud Storage Configuration
-  gcs: {
-    bucketName: process.env.GCS_BUCKET_NAME || 'namazvaktimdepo',
-    keyFilename: './namazvaktim-1453-461cbfd17aaf.json',
-    projectId: 'namazvaktim-1453'
+  // Oracle Object Storage Configuration (S3-uyumlu)
+  oci: {
+    bucketName: process.env.OCI_BUCKET_NAME || 'namazvaktimdepo',
+    namespace: process.env.OCI_NAMESPACE || 'ax4vnct8ysku',
+    region: process.env.OCI_REGION || 'me-jeddah-1',
+    accessKey: process.env.OCI_ACCESS_KEY || '',
+    secretKey: process.env.OCI_SECRET_KEY || '',
   },
 
   // Application Configuration

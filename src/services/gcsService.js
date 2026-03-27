@@ -1,240 +1,212 @@
-const { Storage } = require('@google-cloud/storage');
+const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand,
+  DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const config = require('../config/config');
-const path = require('path');
 
 class GCSService {
   constructor() {
-    // GitHub Actions'da environment variable olarak key geçilebilir
-    const storageConfig = {
-      projectId: config.gcs.projectId
-    };
+    const region = config.oci.region;
+    const namespace = config.oci.namespace;
 
-    // Eğer environment variable varsa onu kullan, yoksa keyFilename kullan
-    if (process.env.GCS_SERVICE_ACCOUNT_KEY) {
-      try {
-        console.log('🔍 GCS_SERVICE_ACCOUNT_KEY environment variable bulundu');
-        console.log('📏 Key uzunluğu:', process.env.GCS_SERVICE_ACCOUNT_KEY.length);
-        console.log('🔤 Key başlangıcı:', process.env.GCS_SERVICE_ACCOUNT_KEY.substring(0, 50) + '...');
+    this.bucketName = config.oci.bucketName;
+    this.namespace = namespace;
+    this.region = region;
 
-        // JSON string'i doğrudan parse et (base64 decode gerekmiyor)
-        const keyData = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
+    // Oracle Object Storage S3-uyumlu endpoint
+    const endpoint = `https://${namespace}.compat.objectstorage.${region}.oraclecloud.com`;
 
-        // Key'in gerekli alanlarını kontrol et
-        if (!keyData.type || !keyData.project_id || !keyData.private_key) {
-          throw new Error('Service account key\'de gerekli alanlar eksik (type, project_id, private_key)');
-        }
+    this.s3 = new S3Client({
+      region,
+      endpoint,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.OCI_ACCESS_KEY || config.oci.accessKey || '',
+        secretAccessKey: process.env.OCI_SECRET_KEY || config.oci.secretKey || '',
+      },
+    });
 
-        storageConfig.credentials = keyData;
-        console.log('🔑 GCS Service Account Key environment variable\'dan yüklendi');
-        console.log('📋 Project ID:', keyData.project_id);
-        console.log('🎯 Client Email:', keyData.client_email);
-      } catch (error) {
-        console.error('❌ GCS Service Account Key parse hatası:', error.message);
-        console.log('📁 Fallback: Dosyadan key yükleniyor...');
-        // Fallback to file
-        storageConfig.keyFilename = config.gcs.keyFilename;
-      }
-    } else {
-      // Local development için dosya kullan
-      console.log('📁 GCS Service Account Key dosyadan yükleniyor (local development)');
-      storageConfig.keyFilename = config.gcs.keyFilename;
-    }
+    // Public URL base
+    this.publicUrlBase =
+      `https://objectstorage.${region}.oraclecloud.com/n/${namespace}/b/${this.bucketName}/o`;
 
-    this.storage = new Storage(storageConfig);
-    this.bucketName = config.gcs.bucketName;
-    this.projectId = config.gcs.projectId;
-    this.bucket = this.storage.bucket(this.bucketName);
+    console.log(`🔗 Oracle Object Storage: ${this.bucketName} (${region})`);
   }
 
   /**
-   * Dosya yükleme işlemi
-   * @param {string} fileName - Dosya adı
-   * @param {Object} data - Yüklenecek veri
-   * @param {Object} metadata - Dosya metadatası
+   * Dosyanin public URL'ini dondur
+   */
+  getPublicUrl(fileName) {
+    return `${this.publicUrlBase}/${encodeURIComponent(fileName)}`;
+  }
+
+  /**
+   * Dosya yukleme islemi
    */
   async uploadFile(fileName, data, metadata = {}) {
     try {
-      console.log(`GCS'ye dosya yükleniyor: ${fileName}`);
+      console.log(`Oracle OS'a dosya yukleniyor: ${fileName}`);
 
-      const file = this.bucket.file(fileName);
-
-      // JSON verisini string'e çevir
       const jsonString = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 
-      // Dosyayı yükle
-      await file.save(jsonString, {
-        metadata: {
-          contentType: 'application/json',
-          ...metadata
-        },
-        resumable: false
-      });
+      await this.s3.send(new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+        Body: jsonString,
+        ContentType: 'application/json',
+        Metadata: Object.fromEntries(
+          Object.entries(metadata).map(([k, v]) => [k, String(v)])
+        ),
+      }));
 
-      console.log(`Dosya başarıyla yüklendi: ${fileName}`);
+      console.log(`Dosya basariyla yuklendi: ${fileName}`);
       return true;
     } catch (error) {
-      console.error(`Dosya yükleme hatası (${fileName}):`, error.message);
+      console.error(`Dosya yukleme hatasi (${fileName}):`, error.message);
       throw error;
     }
   }
 
   /**
-   * Dosya indirme işlemi
-   * @param {string} fileName - İndirilecek dosya adı
+   * Dosya indirme islemi
    */
   async downloadFile(fileName) {
     try {
-      console.log(`GCS'den dosya indiriliyor: ${fileName}`);
+      console.log(`Oracle OS'dan dosya indiriliyor: ${fileName}`);
 
-      const file = this.bucket.file(fileName);
-      const [contents] = await file.download();
+      const res = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+      }));
 
-      // JSON verisini parse et
-      const data = JSON.parse(contents.toString());
+      const body = await res.Body.transformToString();
+      const data = JSON.parse(body);
 
-      console.log(`Dosya başarıyla indirildi: ${fileName}`);
+      console.log(`Dosya basariyla indirildi: ${fileName}`);
       return data;
     } catch (error) {
-      console.error(`Dosya indirme hatası (${fileName}):`, error.message);
+      console.error(`Dosya indirme hatasi (${fileName}):`, error.message);
       throw error;
     }
   }
 
   /**
-   * Dosya var mı kontrol et
-   * @param {string} fileName - Kontrol edilecek dosya adı
+   * Dosya var mi kontrol et
    */
   async fileExists(fileName) {
     try {
-      const file = this.bucket.file(fileName);
-      const [exists] = await file.exists();
-      return exists;
+      await this.s3.send(new HeadObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+      }));
+      return true;
     } catch (error) {
-      console.error(`Dosya varlık kontrolü hatası (${fileName}):`, error.message);
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+        return false;
+      }
+      console.error(`Dosya varlik kontrolu hatasi (${fileName}):`, error.message);
       return false;
     }
   }
 
   /**
-   * GCS bağlantısını test et
+   * Baglanti testi
    */
   async testConnection() {
     try {
-      console.log('GCS bağlantısı test ediliyor...');
+      console.log('Oracle OS baglantisi test ediliyor...');
 
-      // Bucket'a erişim testi
-      const [exists] = await this.bucket.exists();
-      if (!exists) {
-        throw new Error(`Bucket '${this.bucketName}' bulunamadı`);
-      }
-
-      // Basit bir dosya yazma/okuma testi
       const testFileName = 'connection-test.json';
       const testData = {
         timestamp: new Date().toISOString(),
-        test: 'GCS bağlantı testi'
+        test: 'Oracle Object Storage baglanti testi'
       };
 
-      // Test dosyasını yükle
       await this.uploadFile(testFileName, testData, {
-        description: 'GCS bağlantı testi',
+        description: 'Baglanti testi',
         type: 'test'
       });
 
-      // Test dosyasını oku
       const downloadedData = await this.downloadFile(testFileName);
-
-      // Test dosyasını sil
       await this.deleteFile(testFileName);
 
-      console.log('✅ GCS bağlantı testi başarılı');
+      console.log('✅ Oracle OS baglanti testi basarili');
       return {
         success: true,
         bucket: this.bucketName,
-        projectId: this.projectId,
+        namespace: this.namespace,
         testData: downloadedData
       };
-
     } catch (error) {
-      console.error('❌ GCS bağlantı testi başarısız:', error.message);
+      console.error('❌ Oracle OS baglanti testi basarisiz:', error.message);
       throw error;
     }
   }
 
   /**
    * Dosya sil
-   * @param {string} fileName - Silinecek dosya adı
    */
   async deleteFile(fileName) {
     try {
-      console.log(`GCS'den dosya siliniyor: ${fileName}`);
+      console.log(`Oracle OS'dan dosya siliniyor: ${fileName}`);
 
-      const file = this.bucket.file(fileName);
-      await file.delete();
+      await this.s3.send(new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+      }));
 
-      console.log(`Dosya başarıyla silindi: ${fileName}`);
+      console.log(`Dosya basariyla silindi: ${fileName}`);
       return true;
     } catch (error) {
-      console.error(`Dosya silme hatası (${fileName}):`, error.message);
+      console.error(`Dosya silme hatasi (${fileName}):`, error.message);
       throw error;
     }
   }
 
   /**
-   * Bucket'taki dosyaları listele
-   * @param {string} prefix - Dosya adı ön eki (opsiyonel)
+   * Bucket'taki dosyalari listele
    */
   async listFiles(prefix = '') {
     try {
-      const [files] = await this.bucket.getFiles({
-        prefix: prefix
-      });
+      const allFiles = [];
+      let continuationToken;
 
-      return files.map(file => file.name);
+      do {
+        const res = await this.s3.send(new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix || undefined,
+          ContinuationToken: continuationToken,
+        }));
+
+        if (res.Contents) {
+          allFiles.push(...res.Contents.map(obj => obj.Key));
+        }
+        continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+      } while (continuationToken);
+
+      return allFiles;
     } catch (error) {
-      console.error('Dosya listeleme hatası:', error.message);
+      console.error('Dosya listeleme hatasi:', error.message);
       throw error;
     }
   }
 
-  /**
-   * Namaz vakti dosyası için dosya adı oluştur
-   * @param {number} cityId - Şehir ID'si
-   * @param {number} year - Yıl
-   */
   generatePrayerTimeFileName(cityId, year) {
     return config.prayerTimes.fileNamePattern
       .replace('{cityId}', cityId)
       .replace('{year}', year);
   }
 
-  /**
-   * Dini günler için dosya adı oluştur
-   * @param {number} year - Yıl
-   */
   generateReligiousDaysFileName(year) {
     return config.religiousDays.fileNamePattern
       .replace('{year}', year);
   }
 
-  /**
-   * Bayram namazı vakitleri için dosya adı oluştur
-   * @param {number} cityId - Şehir ID'si
-   */
   generateEidTimesFileName(cityId) {
     return config.eidTimes.fileNamePattern
       .replace('{cityId}', cityId);
   }
 
-  /**
-   * Bayram namazı vakitleri dosyasını yükle
-   * @param {number} cityId - Şehir ID'si
-   * @param {Object} eidData - Bayram namazı verileri
-   * @param {Object} cityInfo - Şehir bilgileri
-   */
   async uploadEidTimes(cityId, eidData, cityInfo = {}) {
     const fileName = this.generateEidTimesFileName(cityId);
-
     const data = {
       cityId,
       cityInfo,
@@ -250,68 +222,44 @@ class GCSService {
         time: eidData.eidAlAdhaTime
       }
     };
-
     const metadata = {
-      description: `${cityInfo.fullName || cityId} bayram namazı vakitleri`,
+      description: `${cityInfo.fullName || cityId} bayram namazi vakitleri`,
       uploadedAt: new Date().toISOString(),
       cityId: cityId.toString()
     };
-
     return await this.uploadFile(fileName, data, metadata);
   }
 
-  /**
-   * Şehir bilgileri dosyasını yükle
-   * @param {Array} cities - Şehir listesi
-   */
   async uploadCitiesData(cities) {
     const fileName = 'cities.json';
     const metadata = {
-      description: 'Şehir bilgileri',
+      description: 'Sehir bilgileri',
       uploadedAt: new Date().toISOString()
     };
-
     return await this.uploadFile(fileName, cities, metadata);
   }
 
-  /**
-   * Namaz vakti dosyasını yükle
-   * @param {number} cityId - Şehir ID'si
-   * @param {number} year - Yıl
-   * @param {Array} prayerTimes - Namaz vakitleri
-   * @param {Object} cityInfo - Şehir bilgileri
-   */
   async uploadPrayerTimes(cityId, year, prayerTimes, cityInfo = {}) {
     const fileName = this.generatePrayerTimeFileName(cityId, year);
-
     const data = {
-      cityId: cityId,
-      cityInfo: cityInfo,
-      year: year,
+      cityId,
+      cityInfo,
+      year,
       totalDays: prayerTimes.length,
       generatedAt: new Date().toISOString(),
-      prayerTimes: prayerTimes
+      prayerTimes
     };
-
     const metadata = {
-      description: `${cityInfo.name || cityId} şehri için ${year} yılı namaz vakitleri`,
+      description: `${cityInfo.name || cityId} sehri icin ${year} yili namaz vakitleri`,
       uploadedAt: new Date().toISOString(),
       cityId: cityId.toString(),
       year: year.toString()
     };
-
     return await this.uploadFile(fileName, data, metadata);
   }
 
-  /**
-   * Dini günler dosyasını yükle
-   * @param {number} year - Yıl
-   * @param {Array} events - Filtrelenmiş dini günler
-   * @param {Object} extra - Ek metadata/özellikler
-   */
   async uploadReligiousDays(year, events = [], extra = {}) {
     const fileName = this.generateReligiousDaysFileName(year);
-
     const data = {
       year,
       totalEvents: events.length,
@@ -319,13 +267,11 @@ class GCSService {
       events,
       ...extra
     };
-
     const metadata = {
-      description: `${year} yılı dini günler`,
+      description: `${year} yili dini gunler`,
       uploadedAt: new Date().toISOString(),
       year: year.toString()
     };
-
     return await this.uploadFile(fileName, data, metadata);
   }
 }
