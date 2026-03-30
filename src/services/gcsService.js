@@ -53,7 +53,10 @@ class GCSService {
         Body: jsonString,
         ContentType: 'application/json',
         Metadata: Object.fromEntries(
-          Object.entries(metadata).map(([k, v]) => [k, String(v)])
+          Object.entries(metadata).map(([k, v]) => [
+            k,
+            String(v).replace(/[^\x20-\x7E]/g, ''),
+          ])
         ),
       }));
 
