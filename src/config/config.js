@@ -16,13 +16,11 @@ const config = {
     }
   },
 
-  // Oracle Object Storage Configuration (S3-uyumlu)
-  oci: {
-    bucketName: process.env.OCI_BUCKET_NAME || 'namazvaktimdepo',
-    namespace: process.env.OCI_NAMESPACE || 'ax4vnct8ysku',
-    region: process.env.OCI_REGION || 'me-jeddah-1',
-    accessKey: process.env.OCI_ACCESS_KEY || '',
-    secretKey: process.env.OCI_SECRET_KEY || '',
+  // Storage API Configuration
+  storage: {
+    baseUrl: process.env.STORAGE_API_URL || 'http://158.101.239.197',
+    publicUrl: process.env.STORAGE_PUBLIC_URL || 'http://158.101.239.197/storage',
+    key: process.env.STORAGE_KEY || '',
   },
 
   // Application Configuration

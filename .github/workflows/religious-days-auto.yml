@@ -28,11 +28,7 @@ jobs:
 
       - name: Fetch religious days
         env:
-          OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
-          OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
-          OCI_NAMESPACE: ax4vnct8ysku
-          OCI_REGION: me-jeddah-1
-          OCI_BUCKET_NAME: namazvaktimdepo
+          STORAGE_KEY: ${{ secrets.STORAGE_KEY }}
         run: |
           YEARS_INPUT="${{ github.event.inputs.years }}"
           if [ -n "$YEARS_INPUT" ]; then

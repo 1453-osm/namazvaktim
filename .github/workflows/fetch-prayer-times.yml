@@ -36,11 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120  # 2 saat timeout (paralel olduğu için daha kısa)
     env:
-      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
-      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
-      OCI_NAMESPACE: ax4vnct8ysku
-      OCI_REGION: me-jeddah-1
-      OCI_BUCKET_NAME: namazvaktimdepo
+      STORAGE_KEY: ${{ secrets.STORAGE_KEY }}
 
     strategy:
       fail-fast: false  # Bir hata tüm işlemi durdurmasın
@@ -116,16 +112,16 @@ jobs:
           });
         "
 
-    - name: GCS Bağlantısını Test Et
+    - name: Oracle OS Bağlantısını Test Et
       run: |
-        echo "☁️  Google Cloud Storage bağlantısı test ediliyor..."
+        echo "☁️  Oracle Object Storage bağlantısı test ediliyor..."
         node -e "
-          const GCSService = require('./src/services/gcsService');
-          const gcs = new GCSService();
+          const Oracle OSService = require('./src/services/gcsService');
+          const gcs = new Oracle OSService();
           gcs.testConnection().then(() => {
-            console.log('✅ GCS bağlantısı başarılı');
+            console.log('✅ Oracle OS bağlantısı başarılı');
           }).catch(err => {
-            console.error('❌ GCS bağlantı hatası:', err.message);
+            console.error('❌ Oracle OS bağlantı hatası:', err.message);
             process.exit(1);
           });
         "
@@ -175,8 +171,8 @@ jobs:
         # Özet dosyasını kontrol et
         YEAR="${{ steps.params.outputs.year }}"
         node -e "
-          const GCSService = require('./src/services/gcsService');
-          const gcs = new GCSService();
+          const Oracle OSService = require('./src/services/gcsService');
+          const gcs = new Oracle OSService();
           
           gcs.downloadFile('summary-$YEAR.json')
             .then(summary => {
@@ -269,11 +265,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
-      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
-      OCI_NAMESPACE: ax4vnct8ysku
-      OCI_REGION: me-jeddah-1
-      OCI_BUCKET_NAME: namazvaktimdepo
+      STORAGE_KEY: ${{ secrets.STORAGE_KEY }}
 
     steps:
     - name: Kodu Çek

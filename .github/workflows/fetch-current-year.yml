@@ -28,11 +28,7 @@ jobs:
   fetch-current-year:
     runs-on: ubuntu-latest
     env:
-      OCI_ACCESS_KEY: ${{ secrets.OCI_ACCESS_KEY }}
-      OCI_SECRET_KEY: ${{ secrets.OCI_SECRET_KEY }}
-      OCI_NAMESPACE: ax4vnct8ysku
-      OCI_REGION: me-jeddah-1
-      OCI_BUCKET_NAME: namazvaktimdepo
+      STORAGE_KEY: ${{ secrets.STORAGE_KEY }}
       NODE_ENV: production
     
     steps:
