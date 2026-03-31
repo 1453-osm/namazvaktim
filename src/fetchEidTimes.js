@@ -1,11 +1,11 @@
 const DiyanetApiService = require('./services/diyanetApi');
-const GCSService = require('./services/gcsService');
+const StorageService = require('./services/gcsService');
 const CityService = require('./services/cityService');
 
 class EidTimesFetcher {
   constructor() {
     this.diyanetApi = new DiyanetApiService();
-    this.gcsService = new GCSService();
+    this.gcsService = new StorageService();
     this.cityService = new CityService();
     this.PARALLEL_WORKERS = 20;
   }
@@ -22,7 +22,7 @@ class EidTimesFetcher {
   }
 
   /**
-   * Mevcut GCS verisini API verisiyle karşılaştır
+   * Mevcut Storage verisini API verisiyle karşılaştır
    * Değişiklik varsa true döner
    */
   hasChanged(existing, fresh) {
@@ -92,7 +92,7 @@ class EidTimesFetcher {
           console.log(`[Worker ${workerId}] ${cityDetails.fullName} - yeni dosya oluşturuluyor`);
         }
 
-        // GCS'ye yükle
+        // Storage'ye yükle
         await this.gcsService.uploadEidTimes(cityId, eidData, cityDetails);
         results.updatedCount++;
 

@@ -1,7 +1,7 @@
 name: Auto Fetch Next Year Prayer Times
 
 on:
-  # 3 Aralık'tan başlayarak 3 günde bir Oracle OS'de gelecek yıl verisi var mı kontrol et
+  # 3 Aralık'tan başlayarak 3 günde bir Storage'de gelecek yıl verisi var mı kontrol et
   # 1 Aralık'ta fetch-prayer-times zaten otomatik çalışıyor, bu workflow onun sonucunu kontrol eder
   schedule:
     - cron: '0 0 3 12 *'   # 3 Aralık 00:00 UTC
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       force_run:
-        description: 'Oracle OS kontrolünü atlayıp direkt fetch-prayer-times tetikle'
+        description: 'Storage kontrolünü atlayıp direkt fetch-prayer-times tetikle'
         required: false
         default: false
         type: boolean
@@ -57,25 +57,25 @@ jobs:
         echo "📅 Bugün: $(date)"
         echo "📊 Hedef yıl: ${{ steps.year.outputs.NEXT_YEAR }}"
 
-    - name: Check if data exists in Oracle OS
+    - name: Veri mevcut mu kontrol et
       id: check_gcs
       if: github.event.inputs.force_run != 'true'
       run: |
-        echo "☁️  Oracle OS'de ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri var mı kontrol ediliyor..."
+        echo "☁️  ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri var mı kontrol ediliyor..."
 
         SUMMARY_EXISTS=$(node -e "
-          const Oracle OSService = require('./src/services/gcsService');
-          const gcs = new Oracle OSService();
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
           gcs.fileExists('summary-${{ steps.year.outputs.NEXT_YEAR }}.json')
             .then(exists => console.log(exists ? 'EXISTS' : 'NOT_EXISTS'))
             .catch(() => console.log('NOT_EXISTS'));
         " 2>/dev/null || echo "NOT_EXISTS")
 
         if [ "$SUMMARY_EXISTS" = "EXISTS" ]; then
-          echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri zaten Oracle OS'de mevcut!"
+          echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri mevcut!"
           echo "DATA_EXISTS=true" >> $GITHUB_OUTPUT
         else
-          echo "❌ Oracle OS'de ${{ steps.year.outputs.NEXT_YEAR }} yılı verisi bulunamadı."
+          echo "❌ ${{ steps.year.outputs.NEXT_YEAR }} yılı verisi bulunamadı."
           echo "DATA_EXISTS=false" >> $GITHUB_OUTPUT
         fi
 
@@ -98,7 +98,7 @@ jobs:
     - name: Skip - Data already exists
       if: steps.check_gcs.outputs.DATA_EXISTS == 'true'
       run: |
-        echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri zaten Oracle OS'de mevcut!"
+        echo "✅ ${{ steps.year.outputs.NEXT_YEAR }} yılı verileri mevcut!"
         echo "📁 Tekrar indirme gerekmiyor."
 
     - name: Notify failure

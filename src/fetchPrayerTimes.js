@@ -1,11 +1,11 @@
 const DiyanetApiService = require('./services/diyanetApi');
-const GCSService = require('./services/gcsService');
+const StorageService = require('./services/gcsService');
 const CityService = require('./services/cityService');
 
 class PrayerTimesFetcher {
   constructor() {
     this.diyanetApi = new DiyanetApiService();
-    this.gcsService = new GCSService();
+    this.gcsService = new StorageService();
     this.cityService = new CityService();
     this.PARALLEL_WORKERS = 20; // 20 paralel işlem
   }
@@ -83,7 +83,7 @@ class PrayerTimesFetcher {
           continue;
         }
 
-        // GCS'ye yükle
+        // Storage'ye yükle
         await this.gcsService.uploadPrayerTimes(cityId, year, prayerTimes, cityDetails);
         
         results.successCount++;
@@ -234,7 +234,7 @@ class PrayerTimesFetcher {
   }
 
   /**
-   * Belirli bir şehir için test (GCS yükleme dahil)
+   * Belirli bir şehir için test (Storage yükleme dahil)
    * @param {number} cityId - Test edilecek şehir ID'si
    * @param {number} year - Yıl
    */
@@ -266,7 +266,7 @@ class PrayerTimesFetcher {
       const prayerTimes = await this.diyanetApi.getYearlyPrayerTimes(cityId, year);
       console.log(`${prayerTimes.length} günlük veri alındı`);
 
-      // GCS'ye yükle
+      // Storage'ye yükle
       const result = await this.gcsService.uploadPrayerTimes(cityId, year, prayerTimes, cityDetails);
       console.log(`✅ Başarıyla yüklendi: ${result.fileName}`);
 

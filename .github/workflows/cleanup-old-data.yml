@@ -91,10 +91,10 @@ jobs:
       run: |
         echo "📂 ${{ steps.year.outputs.TARGET_YEAR }} yılına ait dosyalar listeleniyor..."
         
-        # Oracle OS'deki dosyaları listele
+        # Storage'deki dosyaları listele
         node -e "
-          const Oracle OSService = require('./src/services/gcsService');
-          const gcs = new Oracle OSService();
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
           
           async function listOldFiles() {
             try {
@@ -143,8 +143,8 @@ jobs:
         echo "🗑️  ${{ steps.year.outputs.TARGET_YEAR }} yılı verileri siliniyor..."
         
         node -e "
-          const Oracle OSService = require('./src/services/gcsService');
-          const gcs = new Oracle OSService();
+          const GCSService = require('./src/services/gcsService');
+          const gcs = new GCSService();
           
           async function deleteOldFiles() {
             try {

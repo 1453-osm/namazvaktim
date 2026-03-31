@@ -112,20 +112,6 @@ jobs:
           });
         "
 
-    - name: Oracle OS Bağlantısını Test Et
-      run: |
-        echo "☁️  Oracle Object Storage bağlantısı test ediliyor..."
-        node -e "
-          const Oracle OSService = require('./src/services/gcsService');
-          const gcs = new Oracle OSService();
-          gcs.testConnection().then(() => {
-            console.log('✅ Oracle OS bağlantısı başarılı');
-          }).catch(err => {
-            console.error('❌ Oracle OS bağlantı hatası:', err.message);
-            process.exit(1);
-          });
-        "
-
     - name: Şehir İstatistiklerini Göster
       run: |
         echo "🏙️  Şehir istatistikleri:"
@@ -162,52 +148,6 @@ jobs:
         SECONDS=$((DURATION % 60))
         
         echo "⏱️  Toplam süre: ${MINUTES}m ${SECONDS}s"
-
-    - name: İşlem Sonuçlarını Kontrol Et
-      if: always()
-      run: |
-        echo "📊 İşlem sonuçları kontrol ediliyor..."
-        
-        # Özet dosyasını kontrol et
-        YEAR="${{ steps.params.outputs.year }}"
-        node -e "
-          const Oracle OSService = require('./src/services/gcsService');
-          const gcs = new Oracle OSService();
-          
-          gcs.downloadFile('summary-$YEAR.json')
-            .then(summary => {
-              console.log('📈 İşlem Özeti:');
-              console.log(\`- Toplam şehir: \${summary.totalCities}\`);
-              console.log(\`- Başarılı: \${summary.successCount}\`);
-              console.log(\`- Hatalı: \${summary.errorCount}\`);
-              console.log(\`- Paralel worker: \${summary.parallelWorkers}\`);
-              console.log(\`- Toplam süre: \${summary.totalTime}s\`);
-              console.log(\`- Ortalama hız: \${Math.round(summary.totalCities / summary.totalTime)} şehir/saniye\`);
-              
-              if (summary.errors && summary.errors.length > 0) {
-                console.log(\`⚠️  \${summary.errors.length} hata tespit edildi\`);
-                summary.errors.slice(0, 5).forEach(err => {
-                  console.log(\`  - Şehir \${err.cityId}: \${err.error}\`);
-                });
-                if (summary.errors.length > 5) {
-                  console.log(\`  ... ve \${summary.errors.length - 5} hata daha\`);
-                }
-              }
-              
-              // Worker detayları
-              if (summary.workerResults) {
-                console.log('\\n👥 Worker Performansı:');
-                summary.workerResults.forEach(worker => {
-                  const successRate = Math.round((worker.successCount / worker.totalCities) * 100);
-                  console.log(\`  - Worker \${worker.workerId}: \${worker.successCount}/\${worker.totalCities} (%\${successRate})\`);
-                });
-              }
-            })
-            .catch(err => {
-              console.error('❌ Özet dosyası okunamadı:', err.message);
-              process.exit(1);
-            });
-        "
 
     - name: Slack Bildirimi (Başarılı)
       if: success() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
